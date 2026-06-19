@@ -39,7 +39,6 @@ data/processed/app.db
 */.ipynb_checkpoints/*
 .ipython/
 
-# If you output raw plots, images, or validation charts dynamically, ignore them
 notebooks/plots/
 *.png
 *.jpg

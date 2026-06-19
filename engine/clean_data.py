@@ -70,8 +70,8 @@ def clean_movie_data():
 
 
 def clean_and_downsample_ratings(
-    min_user_activity=50,
-    min_movie_popularity=100
+    min_user_activity=20,
+    min_movie_popularity=20
 ):
     """
     Filter ratings to keep:
