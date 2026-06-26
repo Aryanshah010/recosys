@@ -21,6 +21,7 @@ rec_engine = HybridFusionEngine()
 
 # 📂 Load Synthetic Cohort for the Login Dropdown
 SYNTH_PROFILES_PATH = "data/processed/synthetic_user_profiles.csv"
+sample_users = []
 if os.path.exists(SYNTH_PROFILES_PATH):
     synth_df = pd.read_csv(SYNTH_PROFILES_PATH)
     sample_users = synth_df.head(30).to_dict('records') # Show 30 users in dropdown
@@ -34,7 +35,11 @@ else:
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Renders the login page with the synthetic cohort dropdown."""
-    return templates.TemplateResponse("login.html", {"request": request, "users": sample_users})
+    context = {
+        "request": request,
+        "users": sample_users
+    }
+    return templates.TemplateResponse("login.html", context)
 
 @router.post("/login")
 async def login(user_id: str = Form(...), db: Session = Depends(get_db)):
@@ -86,12 +91,13 @@ async def dashboard(request: Request, user_id: int, db: Session = Depends(get_db
         k=10
     )
     
-    return templates.TemplateResponse("dashboard.html", {
+    context = {
         "request": request,
         "user": user,
         "recommendations": recs,
         "history_count": len(history)
-    })
+    }
+    return templates.TemplateResponse("dashboard.html", context)
 
 @router.post("/api/interact")
 async def log_interaction(
