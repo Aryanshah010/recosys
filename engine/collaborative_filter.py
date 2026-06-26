@@ -4,7 +4,7 @@ from surprise import Reader, Dataset, SVD
 from surprise import dump
 
 PROCESSED_DIR = "data/processed"
-RATINGS_PATH = os.path.join(PROCESSED_DIR, "ratings_clean.csv")
+RATINGS_PATH = os.path.join(PROCESSED_DIR, "ratings_final.csv")
 MODEL_PATH = os.path.join(PROCESSED_DIR, "svd_model.pkl")
 
 def train_svd_model():

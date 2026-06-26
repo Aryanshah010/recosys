@@ -1,11 +1,70 @@
-from app.db import engine, Base
-from app.models import User, Movie, Interaction, EvaluationMetric
+import pandas as pd
+from api.db import engine, SessionLocal, Base
+from api.models import User, Movie, Interaction, EvaluationMetric
 
 def init_db():
-    print("Initializing database tables...")
-    # Base.metadata.create_all binds our model classes to the engine schema 
+    print("📦 Initializing database tables...")
     Base.metadata.create_all(bind=engine)
-    print("Database setup complete! 'recommender.db' file created successfully.")
+    print("✅ Database schema created successfully.")
+
+def seed_movies():
+    print("🎬 Seeding movies from movies_final.csv...")
+    csv_path = "data/processed/movies_final.csv"
+    
+    try:
+        df = pd.read_csv(csv_path)
+    except FileNotFoundError:
+        print("❌ movies_final.csv not found. Run the master pipeline first.")
+        return
+
+    # CRITICAL FIX 1: Deduplicate by movieId (Primary Key)
+    original_count = len(df)
+    df = df.drop_duplicates(subset=['movieId'], keep='first')
+    
+    # CRITICAL FIX 2: Deduplicate by tmdb_id (Unique Constraint)
+    # If two different MovieLens IDs map to the same TMDb ID, we keep the first one.
+    # This prevents the UNIQUE constraint violation on tmdb_id.
+    df = df.drop_duplicates(subset=['tmdbId'], keep='first')
+    
+    duplicates_removed = original_count - len(df)
+    if duplicates_removed > 0:
+        print(f"⚠️ Removed {duplicates_removed} duplicate entries (by movieId or tmdbId) from CSV.")
+
+    db = SessionLocal()
+    try:
+        # Prevent duplicate seeding on re-runs
+        if db.query(Movie).count() > 0:
+            print("ℹ️ Movies table already populated. Skipping seed.")
+            return
+
+        movies_to_add = []
+        for _, row in df.iterrows():
+            # Ensure tmdb_id is an integer or None
+            tmdb_val = row.get('tmdbId')
+            if pd.notna(tmdb_val):
+                tmdb_val = int(tmdb_val)
+            else:
+                tmdb_val = None
+                
+            movie = Movie(
+                id=int(row['movieId']),
+                tmdb_id=tmdb_val,
+                title=str(row.get('title_x', row.get('title', 'Unknown'))),
+                genres=str(row.get('clean_genres', row.get('genres', ''))),
+                original_language=str(row.get('language', 'en')).lower()
+            )
+            movies_to_add.append(movie)
+            
+        # Bulk insert for performance
+        db.bulk_save_objects(movies_to_add)
+        db.commit()
+        print(f"🎉 Successfully seeded {len(movies_to_add)} unique movies into SQLite.")
+    except Exception as e:
+        print(f"❌ Error seeding movies: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     init_db()
+    seed_movies()
