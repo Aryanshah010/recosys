@@ -7,13 +7,17 @@ from .models import User, Interaction
 import pandas as pd
 import os
 import sys
+from pathlib import Path
 
 # Import the ML Engine from the root directory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from engine.hybrid_fusion import HybridFusionEngine
 
 router = APIRouter()
-templates = Jinja2Templates(directory="api/templates")
+
+# Fix: Use absolute path for templates directory
+template_dir = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(template_dir))
 
 # 🧠 Initialize the ML Engine once on startup (loads .pkl files into RAM)
 print("🔄 Loading Hybrid Fusion Engine into memory...")
@@ -21,12 +25,12 @@ rec_engine = HybridFusionEngine()
 
 # 📂 Load Synthetic Cohort for the Login Dropdown
 SYNTH_PROFILES_PATH = "data/processed/synthetic_user_profiles.csv"
+synth_df = None
 sample_users = []
+
 if os.path.exists(SYNTH_PROFILES_PATH):
     synth_df = pd.read_csv(SYNTH_PROFILES_PATH)
-    sample_users = synth_df.head(30).to_dict('records') # Show 30 users in dropdown
-else:
-    sample_users = []
+    sample_users = synth_df.head(30).to_dict('records')
 
 # ==========================================
 # ROUTES
@@ -35,11 +39,10 @@ else:
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Renders the login page with the synthetic cohort dropdown."""
-    context = {
-        "request": request,
-        "users": sample_users
-    }
-    return templates.TemplateResponse("login.html", context)
+    return templates.TemplateResponse(
+        "login.html", 
+        {"request": request, "users": sample_users}
+    )
 
 @router.post("/login")
 async def login(user_id: str = Form(...), db: Session = Depends(get_db)):
@@ -47,6 +50,8 @@ async def login(user_id: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == str(user_id)).first()
     
     if not user:
+        if synth_df is None:
+            raise HTTPException(status_code=500, detail="Synthetic profiles not loaded")
         # Fetch profile from synthetic CSV
         profile = synth_df[synth_df['user_id'].astype(str) == str(user_id)]
         if profile.empty:
@@ -85,19 +90,21 @@ async def dashboard(request: Request, user_id: int, db: Session = Depends(get_db
     
     # 3. Generate Recommendations
     recs = rec_engine.recommend(
-        user_id=str(user.username), # SVD expects the original string ID (e.g., '1000269')
+        user_id=str(user.username),
         user_profile=user_profile,
         user_history=history,
         k=10
     )
     
-    context = {
-        "request": request,
-        "user": user,
-        "recommendations": recs,
-        "history_count": len(history)
-    }
-    return templates.TemplateResponse("dashboard.html", context)
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "user": user,
+            "recommendations": recs,
+            "history_count": len(history)
+        }
+    )
 
 @router.post("/api/interact")
 async def log_interaction(
