@@ -1,14 +1,10 @@
 """
-Master Pipeline Orchestrator for Hybrid Movie Recommender Thesis
-================================================================
 Single entry point that executes the full sequential pipeline:
 1. Data Cleaning & ETL (MovieLens + TMDb fusion)
 2. CBF Matrix Generation (TF-IDF + Cosine Similarity)
 3. Synthetic Cohort Generation (Nepali IT Male Students)
 4. Collaborative Filtering Training (SVD on combined data)
 5. Master Evaluation (4-model comparison + bias metrics)
-
-Usage: python main.py
 """
 
 import subprocess
@@ -17,9 +13,6 @@ import os
 import time
 from pathlib import Path
 
-# =====================================================================
-# CONFIGURATION
-# =====================================================================
 PROJECT_ROOT = Path(__file__).parent.resolve()
 SRC_DIR = PROJECT_ROOT / "src"
 ENGINE_DIR=PROJECT_ROOT / "engine"
@@ -27,7 +20,6 @@ EVALUATION_DIR=PROJECT_ROOT / "evaluation"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 RESULTS_DIR = PROJECT_ROOT / "results"
 
-# Ordered pipeline steps: (script_path, description, critical_artifacts)
 PIPELINE_STEPS = [
     (
         SRC_DIR / "clean_data.py",
@@ -57,28 +49,20 @@ PIPELINE_STEPS = [
 ]
 
 
-# =====================================================================
-# UTILITY FUNCTIONS
-# =====================================================================
 def print_banner(text: str, char: str = "=", width: int = 70):
-    """Print a formatted section banner."""
     print(f"\n{char * width}")
     print(f"  {text}")
     print(f"{char * width}\n")
 
-
 def print_step_header(step_num: int, total: int, description: str):
-    """Print a formatted step header."""
     print(f"\n{'─' * 60}")
     print(f"  ▶ [{step_num}/{total}] {description}")
     print(f"{'─' * 60}")
 
 
 def check_artifacts(artifacts: list[str], context: str) -> bool:
-    """Verify that expected output artifacts exist after a step."""
     missing = []
     for artifact in artifacts:
-        # Check both processed dir and results dir
         found = (
             (PROCESSED_DIR / artifact).exists()
             or (RESULTS_DIR / artifact).exists()
@@ -88,69 +72,62 @@ def check_artifacts(artifacts: list[str], context: str) -> bool:
             missing.append(artifact)
 
     if missing:
-        print(f"\n  ⚠️  WARNING: Missing artifacts after {context}:")
+        print(f"\nWARNING: Missing artifacts after {context}:")
         for m in missing:
-            print(f"     ✗ {m}")
+            print(f" ✗ {m}")
         return False
     
-    print(f"  ✅ All {len(artifacts)} expected artifacts verified.")
+    print(f"All {len(artifacts)} expected artifacts verified.")
     return True
 
 
 def run_script(script_path: Path, description: str) -> bool:
-    """Execute a Python script as a subprocess with real-time output."""
     if not script_path.exists():
-        print(f"\n  ❌ FATAL: Script not found: {script_path}")
-        print(f"     Ensure '{script_path.name}' exists in the src/ directory.")
+        print(f"\nFATAL: Script not found: {script_path}")
+        print(f"   Ensure '{script_path.name}' exists in the src/ directory.")
         return False
 
-    print(f"\n  📂 Running: {script_path.relative_to(PROJECT_ROOT)}")
+    print(f"\n Running: {script_path.relative_to(PROJECT_ROOT)}")
     start_time = time.time()
 
     try:
         result = subprocess.run(
             [sys.executable, str(script_path)],
             cwd=str(PROJECT_ROOT),
-            capture_output=False,  # Real-time output streaming
+            capture_output=False,  
             text=True,
-            timeout=3600  # 1-hour safety timeout per step
+            timeout=3600  
         )
         elapsed = time.time() - start_time
 
         if result.returncode != 0:
-            print(f"\n  ❌ FAILED ({elapsed:.1f}s): {description}")
-            print(f"     Exit code: {result.returncode}")
+            print(f"\n FAILED ({elapsed:.1f}s): {description}")
+            print(f"   Exit code: {result.returncode}")
             return False
 
-        print(f"\n  ✅ COMPLETED ({elapsed:.1f}s): {description}")
+        print(f"\n  COMPLETED ({elapsed:.1f}s): {description}")
         return True
 
     except subprocess.TimeoutExpired:
-        print(f"\n  ❌ TIMEOUT: {description} exceeded 1-hour limit")
+        print(f"\n  TIMEOUT: {description} exceeded 1-hour limit")
         return False
     except Exception as e:
-        print(f"\n  ❌ ERROR: {e}")
+        print(f"\n ERROR: {e}")
         return False
 
-
-# =====================================================================
-# MAIN PIPELINE EXECUTION
-# =====================================================================
 def main():
     print_banner("HYBRID MOVIE RECOMMENDER — MASTER PIPELINE")
     print(f"  Project Root: {PROJECT_ROOT}")
     print(f"  Python:       {sys.executable}")
     print(f"  Steps:        {len(PIPELINE_STEPS)}")
 
-    # Pre-flight checks
     if not SRC_DIR.exists():
-        print(f"\n❌ FATAL: src/ directory not found at {SRC_DIR}")
+        print(f"\n FATAL: src/ directory not found at {SRC_DIR}")
         sys.exit(1)
 
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    # Execute pipeline sequentially
     total_steps = len(PIPELINE_STEPS)
     completed_steps = 0
     pipeline_start = time.time()
@@ -167,7 +144,6 @@ def main():
             print(f"  Completed steps will be skipped via artifact checks.\n")
             sys.exit(1)
 
-        # Verify outputs
         check_artifacts(artifacts, description)
         completed_steps += 1
 
@@ -177,8 +153,8 @@ def main():
     print(f"  Steps completed:  {completed_steps}/{total_steps}")
     print(f"  Total time:       {total_elapsed:.1f}s ({total_elapsed/60:.1f} min)")
     print(f"  Results saved to: {RESULTS_DIR / 'thesis_evaluation_metrics.csv'}")
-    print(f"\n  📊 Open the results CSV to extract tables for Chapter 4.")
-    print(f"  📝 Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")
+    print(f"\n Open the results CSV to extract tables for Chapter 4.")
+    print(f"  Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")
     print()
 
 

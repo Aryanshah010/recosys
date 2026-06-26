@@ -1,141 +1,222 @@
-from fastapi import APIRouter, Request, Depends, Form, HTTPException
+from pathlib import Path
+import pandas as pd
+from fastapi import (
+    APIRouter,
+    Request,
+    Depends,
+    Form,
+    HTTPException,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from .db import get_db
 from .models import User, Interaction
-import pandas as pd
-import os
-import sys
-from pathlib import Path
-
-# Import the ML Engine from the root directory
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from engine.hybrid_fusion import HybridFusionEngine
 
 router = APIRouter()
 
-# Fix: Use absolute path for templates directory
-template_dir = Path(__file__).parent / "templates"
-templates = Jinja2Templates(directory=str(template_dir))
+BASE_DIR = Path(__file__).resolve().parent.parent
+TEMPLATE_DIR = BASE_DIR / "api" / "templates"
+SYNTH_PROFILES_PATH = (
+    BASE_DIR / "data" / "processed" / "synthetic_user_profiles.csv"
+)
 
-# 🧠 Initialize the ML Engine once on startup (loads .pkl files into RAM)
-print("🔄 Loading Hybrid Fusion Engine into memory...")
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+
+print("Loading Hybrid Fusion Engine into memory...")
 rec_engine = HybridFusionEngine()
+print("Hybrid Fusion Engine Ready.")
 
-# 📂 Load Synthetic Cohort for the Login Dropdown
-SYNTH_PROFILES_PATH = "data/processed/synthetic_user_profiles.csv"
 synth_df = None
 sample_users = []
 
-if os.path.exists(SYNTH_PROFILES_PATH):
+if SYNTH_PROFILES_PATH.exists():
+    print("Loading synthetic user profiles...")
     synth_df = pd.read_csv(SYNTH_PROFILES_PATH)
-    sample_users = synth_df.head(30).to_dict('records')
 
-# ==========================================
-# ROUTES
-# ==========================================
+    if "user_id" in synth_df.columns:
+        synth_df["user_id"] = synth_df["user_id"].astype(str)
+
+    sample_users = synth_df.head(30).to_dict("records")
+    print(f"Loaded {len(synth_df)} synthetic users")
+
+else:
+    print(
+        f"Synthetic profile file not found: "
+        f"{SYNTH_PROFILES_PATH}"
+    )
 
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
-    """Renders the login page with the synthetic cohort dropdown."""
+
     return templates.TemplateResponse(
-        "login.html", 
-        {"request": request, "users": sample_users}
+        request=request,
+        name="login.html",
+        context={
+            "users": sample_users
+        },
     )
 
+
 @router.post("/login")
-async def login(user_id: str = Form(...), db: Session = Depends(get_db)):
-    """Handles login. Creates the user in SQLite if they don't exist yet."""
-    user = db.query(User).filter(User.username == str(user_id)).first()
-    
-    if not user:
+async def login(
+    user_id: str = Form(...),
+    db: Session = Depends(get_db),
+):
+
+    user_id = str(user_id)
+
+    user = (
+        db.query(User)
+        .filter(User.username == user_id)
+        .first()
+    )
+
+    if user is None:
+
         if synth_df is None:
-            raise HTTPException(status_code=500, detail="Synthetic profiles not loaded")
-        # Fetch profile from synthetic CSV
-        profile = synth_df[synth_df['user_id'].astype(str) == str(user_id)]
+            raise HTTPException(
+                status_code=500,
+                detail="Synthetic profiles not loaded",
+            )
+
+        profile = synth_df[
+            synth_df["user_id"] == user_id
+        ]
+
         if profile.empty:
-            raise HTTPException(status_code=404, detail="Synthetic user not found in cohort")
+            raise HTTPException(
+                status_code=404,
+                detail="Synthetic user not found",
+            )
+
         profile = profile.iloc[0]
-        
-        # Save to SQLite
+
         user = User(
-            username=str(user_id),
-            password_hash="synthetic_hash", # Dummy hash for prototype
-            preferred_genres=str(profile.get('preferred_genres', '')),
-            preferred_languages=str(profile.get('preferred_languages', ''))
+            username=user_id,
+            password_hash="synthetic_hash",
+            preferred_genres=str(
+                profile.get("preferred_genres", "")
+            ),
+            preferred_languages=str(
+                profile.get("preferred_languages", "")
+            ),
         )
+
         db.add(user)
         db.commit()
         db.refresh(user)
-        
-    return RedirectResponse(url=f"/dashboard?user_id={user.id}", status_code=303)
+
+    return RedirectResponse(
+        url=f"/dashboard?user_id={user.id}",
+        status_code=303,
+    )
+
 
 @router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, user_id: int, db: Session = Depends(get_db)):
-    """Generates recommendations using the Hybrid Engine and SQLite history."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found in database")
-        
-    # 1. Fetch Interaction History from SQLite (The Feedback Loop)
-    interactions = db.query(Interaction).filter(Interaction.user_id == user.id).all()
-    history = [i.movie_id for i in interactions]
-    
-    # 2. Prepare Profile for the ML Engine
-    user_profile = {
-        'preferred_languages': user.preferred_languages,
-        'preferred_genres': user.preferred_genres
-    }
-    
-    # 3. Generate Recommendations
-    recs = rec_engine.recommend(
-        user_id=str(user.username),
-        user_profile=user_profile,
-        user_history=history,
-        k=10
+async def dashboard(
+    request: Request,
+    user_id: int,
+    db: Session = Depends(get_db),
+):
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
     )
-    
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    interactions = (
+        db.query(Interaction)
+        .filter(
+            Interaction.user_id == user.id
+        )
+        .all()
+    )
+
+    history = [
+        interaction.movie_id
+        for interaction in interactions
+    ]
+
+    user_profile = {
+        "preferred_languages":
+            user.preferred_languages,
+        "preferred_genres":
+            user.preferred_genres,
+    }
+
+    try:
+        recs = rec_engine.recommend(
+            user_id=str(user.username),
+            user_profile=user_profile,
+            user_history=history,
+            k=10,
+        )
+
+    except Exception as e:
+        print(f"Recommendation error: {e}")
+        recs = []
+
     return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
+        request=request,
+        name="dashboard.html",
+        context={
             "user": user,
             "recommendations": recs,
-            "history_count": len(history)
-        }
+            "history_count": len(history),
+        },
     )
+
 
 @router.post("/api/interact")
 async def log_interaction(
-    user_id: int = Form(...), 
-    movie_id: int = Form(...), 
-    action: str = Form(...), 
-    db: Session = Depends(get_db)
+    user_id: int = Form(...),
+    movie_id: int = Form(...),
+    action: str = Form(...),
+    db: Session = Depends(get_db),
 ):
-    """
-    CRITICAL THESIS COMPONENT: The User Interaction Loop.
-    Logs clicks/likes to SQLite to feed the CF model and update cold-start status.
-    """
-    # Map UI actions to numeric ratings for Surprise/CF compatibility
-    rating_map = {"like": 5.0, "watchlist": 4.0, "click": 3.0, "dislike": 1.0}
+    rating_map = {
+        "like": 5.0,
+        "watchlist": 4.0,
+        "click": 3.0,
+        "dislike": 1.0,
+    }
+
     rating = rating_map.get(action, 3.0)
-    
-    # Prevent duplicate logs
-    existing = db.query(Interaction).filter(
-        Interaction.user_id == user_id,
-        Interaction.movie_id == movie_id,
-        Interaction.interaction_type == action
-    ).first()
-    
-    if not existing:
-        new_interaction = Interaction(
+
+    existing = (
+        db.query(Interaction)
+        .filter(
+            Interaction.user_id == user_id,
+            Interaction.movie_id == movie_id,
+            Interaction.interaction_type == action,
+        )
+        .first()
+    )
+
+    if existing is None:
+
+        interaction = Interaction(
             user_id=user_id,
             movie_id=movie_id,
             rating=rating,
-            interaction_type=action
+            interaction_type=action,
         )
-        db.add(new_interaction)
+
+        db.add(interaction)
         db.commit()
-        
-    return {"status": "success", "message": f"Logged {action} for movie {movie_id}"}
+
+    return {
+        "status": "success",
+        "message": (
+            f"Logged {action} "
+            f"for movie {movie_id}"
+        ),
+    }
