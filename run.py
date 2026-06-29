@@ -8,7 +8,7 @@ def init_db():
     print("Database schema created successfully.")
 
 def seed_movies():
-    print("🎬 Seeding movies from movies_final.csv...")
+    print("Seeding movies from movies_final.csv...")
     csv_path = "data/processed/movies_final.csv"
     
     try:

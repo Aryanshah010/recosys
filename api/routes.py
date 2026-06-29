@@ -1,4 +1,5 @@
 from pathlib import Path
+import csv
 import pandas as pd
 from fastapi import (
     APIRouter,
@@ -7,11 +8,11 @@ from fastapi import (
     Form,
     HTTPException,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from .db import get_db
-from .models import User, Interaction
+from .models import User, Interaction, Movie
 from engine.hybrid_fusion import HybridFusionEngine
 
 router = APIRouter()
@@ -21,6 +22,7 @@ TEMPLATE_DIR = BASE_DIR / "api" / "templates"
 SYNTH_PROFILES_PATH = (
     BASE_DIR / "data" / "processed" / "synthetic_user_profiles.csv"
 )
+EVAL_RESULTS_PATH = BASE_DIR / "results" / "thesis_evaluation_metrics.csv"
 
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
@@ -47,15 +49,15 @@ else:
         f"{SYNTH_PROFILES_PATH}"
     )
 
+
+# ── Login / Home ─────────────────────────────────────────────────────────────
+
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
-
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={
-            "users": sample_users
-        },
+        context={"users": sample_users},
     )
 
 
@@ -64,7 +66,6 @@ async def login(
     user_id: str = Form(...),
     db: Session = Depends(get_db),
 ):
-
     user_id = str(user_id)
 
     user = (
@@ -81,9 +82,7 @@ async def login(
                 detail="Synthetic profiles not loaded",
             )
 
-        profile = synth_df[
-            synth_df["user_id"] == user_id
-        ]
+        profile = synth_df[synth_df["user_id"] == user_id]
 
         if profile.empty:
             raise HTTPException(
@@ -114,6 +113,65 @@ async def login(
     )
 
 
+# ── Register ─────────────────────────────────────────────────────────────────
+
+@router.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="register.html",
+        context={},
+    )
+
+
+@router.post("/register")
+async def register(
+    request: Request,
+    username: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    form = await request.form()
+    languages = form.getlist("languages")
+    genres = form.getlist("genres")
+
+    username = username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
+
+    # Check for duplicate
+    existing = (
+        db.query(User)
+        .filter(User.username == username)
+        .first()
+    )
+    if existing:
+        return RedirectResponse(
+            url=f"/dashboard?user_id={existing.id}",
+            status_code=303,
+        )
+
+    preferred_languages = "|".join(languages) if languages else "EN"
+    preferred_genres = "|".join(genres) if genres else "Action|Drama"
+
+    user = User(
+        username=username,
+        password_hash="user_registered",
+        preferred_languages=preferred_languages,
+        preferred_genres=preferred_genres,
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return RedirectResponse(
+        url=f"/dashboard?user_id={user.id}",
+        status_code=303,
+    )
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
@@ -134,9 +192,7 @@ async def dashboard(
 
     interactions = (
         db.query(Interaction)
-        .filter(
-            Interaction.user_id == user.id
-        )
+        .filter(Interaction.user_id == user.id)
         .all()
     )
 
@@ -146,10 +202,8 @@ async def dashboard(
     ]
 
     user_profile = {
-        "preferred_languages":
-            user.preferred_languages,
-        "preferred_genres":
-            user.preferred_genres,
+        "preferred_languages": user.preferred_languages,
+        "preferred_genres": user.preferred_genres,
     }
 
     try:
@@ -175,6 +229,8 @@ async def dashboard(
     )
 
 
+# ── Interaction logging ───────────────────────────────────────────────────────
+
 @router.post("/api/interact")
 async def log_interaction(
     user_id: int = Form(...),
@@ -196,20 +252,17 @@ async def log_interaction(
         .filter(
             Interaction.user_id == user_id,
             Interaction.movie_id == movie_id,
-            Interaction.interaction_type == action,
         )
         .first()
     )
 
     if existing is None:
-
         interaction = Interaction(
             user_id=user_id,
             movie_id=movie_id,
             rating=rating,
             interaction_type=action,
         )
-
         db.add(interaction)
         db.commit()
 
@@ -220,3 +273,62 @@ async def log_interaction(
             f"for movie {movie_id}"
         ),
     }
+
+
+# ── Admin ─────────────────────────────────────────────────────────────────────
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={},
+    )
+
+
+@router.get("/api/admin/stats")
+async def admin_stats(db: Session = Depends(get_db)):
+    total_users = db.query(User).count()
+    total_interactions = db.query(Interaction).count()
+    total_movies = db.query(Movie).count()
+    total_likes = (
+        db.query(Interaction)
+        .filter(Interaction.interaction_type == "like")
+        .count()
+    )
+
+    return JSONResponse({
+        "total_users": total_users,
+        "total_interactions": total_interactions,
+        "total_movies": total_movies,
+        "total_likes": total_likes,
+    })
+
+
+@router.get("/api/admin/metrics")
+async def admin_metrics():
+    if not EVAL_RESULTS_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Evaluation results not found. Run the master pipeline first.",
+        )
+
+    raw_rows = []
+    with open(EVAL_RESULTS_PATH, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            raw_rows.append({
+                "Model": row.get("Model", ""),
+                "Archetype": row.get("Archetype", ""),
+                "Precision@10": float(row.get("Precision@10", 0)),
+                "Recall@10": float(row.get("Recall@10", 0)),
+                "NDCG@10": float(row.get("NDCG@10", 0)),
+                "Filter_Bubble_Score": float(row.get("Filter_Bubble_Score", 0)),
+                "Language_Diversity": float(row.get("Language_Diversity", 0)),
+                "Genre_Diversity": float(row.get("Genre_Diversity", 0)),
+            })
+
+    return JSONResponse({
+        "raw": raw_rows,
+        "summary": raw_rows,   # already grouped by Model+Archetype from eval script
+    })

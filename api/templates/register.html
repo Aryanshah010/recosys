@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecoSys | Register</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0f172a; }
+        .check-card input:checked ~ .card-label {
+            border-color: #ef4444;
+            background-color: rgba(239,68,68,0.15);
+        }
+        .check-card input { display: none; }
+    </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-6 text-white">
+    <div class="w-full max-w-2xl">
+
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-red-500 tracking-tight">RecoSys</h1>
+            <p class="text-slate-400 mt-1 text-sm">BSc Computing Thesis Prototype &mdash; Aryan Shah</p>
+            <p class="text-slate-300 mt-3">Create your profile to get personalised recommendations</p>
+        </div>
+
+        <form action="/register" method="post" class="bg-slate-800 rounded-2xl shadow-2xl p-8 space-y-8 border border-slate-700">
+
+            <!-- Username -->
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">Display Name</label>
+                <input
+                    type="text"
+                    name="username"
+                    placeholder="e.g. aryan_2024"
+                    required
+                    maxlength="40"
+                    class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 transition"
+                />
+            </div>
+
+            <!-- Language Preferences -->
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1">Preferred Languages
+                    <span class="text-slate-500 font-normal ml-1">(pick all that apply)</span>
+                </label>
+                <p class="text-xs text-slate-500 mb-3">These are used to personalise recommendations &mdash; key to the thesis RQ1 localisation weighting.</p>
+                <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    {% set langs = [
+                        ('EN','English'), ('HI','Hindi'), ('NE','Nepali'),
+                        ('JA','Japanese'), ('KO','Korean'), ('ZH','Chinese'),
+                        ('FR','French'), ('ES','Spanish'), ('DE','German')
+                    ] %}
+                    {% for code, name in langs %}
+                    <label class="check-card cursor-pointer select-none">
+                        <input type="checkbox" name="languages" value="{{ code }}">
+                        <div class="card-label border border-slate-600 rounded-lg px-3 py-2 text-center text-sm font-medium text-slate-300 transition hover:border-slate-400">
+                            {{ name }}
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Genre Preferences -->
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1">Preferred Genres
+                    <span class="text-slate-500 font-normal ml-1">(pick 2–4)</span>
+                </label>
+                <p class="text-xs text-slate-500 mb-3">Genre overlap is the CBF signal used in cold-start and hybrid scoring.</p>
+                <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    {% set genres = [
+                        'Action','Animation','Comedy','Crime',
+                        'Documentary','Drama','Fantasy','Horror',
+                        'Musical','Romance','ScienceFiction','Thriller'
+                    ] %}
+                    {% for g in genres %}
+                    <label class="check-card cursor-pointer select-none">
+                        <input type="checkbox" name="genres" value="{{ g }}">
+                        <div class="card-label border border-slate-600 rounded-lg px-3 py-2 text-center text-sm font-medium text-slate-300 transition hover:border-slate-400">
+                            {{ g }}
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Cold-start notice -->
+            <div class="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 text-sm text-yellow-200">
+                <span class="font-semibold text-yellow-400">&#9432; Cold-Start Mode</span>
+                &nbsp;—&nbsp;Your first visit will use <strong>CBF + preference weighting</strong> only (no rating history yet).
+                As you interact with movies, the system switches to the full <strong>Hybrid SVD + CBF</strong> model.
+            </div>
+
+            <!-- Submit -->
+            <button
+                type="submit"
+                class="w-full bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold py-3 rounded-xl transition-all duration-200 text-base tracking-wide">
+                Create Profile &amp; Get Recommendations →
+            </button>
+
+            <p class="text-center text-slate-500 text-sm">
+                Already have a profile?
+                <a href="/" class="text-red-400 hover:text-red-300 underline">Select synthetic user</a>
+            </p>
+        </form>
+    </div>
+</body>
+</html>
