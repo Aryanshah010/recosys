@@ -1,431 +1,601 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RecoSys | Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        body { background: #0f172a; }
-        .stat-card { background: #1e293b; border: 1px solid #334155; }
-        .section-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; margin-bottom: 0.75rem; }
-        .model-best { background: rgba(239,68,68,0.15); }
+      body {
+        background: #0f172a;
+      }
+      .stat-card {
+        background: #1e293b;
+        border: 1px solid #334155;
+      }
+      .section-title {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: 0.75rem;
+      }
+      .model-best {
+        background: rgba(239, 68, 68, 0.15);
+      }
     </style>
-</head>
+  </head>
 
-<body class="min-h-screen text-white">
-
-    <!-- Nav -->
-    <nav class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div class="flex items-center gap-3">
-            <a href="/" class="text-red-500 font-extrabold text-xl tracking-tight">RecoSys</a>
-            <span class="text-slate-500 text-xs border border-slate-700 rounded px-2 py-0.5">Admin</span>
-        </div>
-        <a href="/" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-3 py-1 transition">← Back to Login</a>
+  <body class="min-h-screen text-white">
+    <nav
+      class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50"
+    >
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-red-500 font-extrabold text-xl tracking-tight"
+          >RecoSys</a
+        >
+        <span
+          class="text-slate-500 text-xs border border-slate-700 rounded px-2 py-0.5"
+          >Admin</span
+        >
+      </div>
+      <a
+        href="/"
+        class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-3 py-1 transition"
+        >← Back to Login</a
+      >
     </nav>
 
     <main class="max-w-7xl mx-auto px-4 py-8 space-y-10">
+      <div>
+        <h1 class="text-2xl font-bold text-white">
+          System Monitoring &amp; Evaluation
+        </h1>
+        <p class="text-slate-400 text-sm mt-1">
+          BSc Computing Thesis &mdash; Hybrid Recommender System for Nepali IT
+          Students &mdash; Aryan Shah
+        </p>
+      </div>
 
-        <!-- ── Page Header ── -->
-        <div>
-            <h1 class="text-2xl font-bold text-white">System Monitoring &amp; Evaluation</h1>
-            <p class="text-slate-400 text-sm mt-1">
-                BSc Computing Thesis &mdash; Hybrid Recommender System for Nepali IT Students &mdash; Aryan Shah
+      <section>
+        <p class="section-title">Live Usage Stats (SQLite)</p>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="stats-grid">
+          <div class="stat-card rounded-xl p-5 text-center">
+            <p class="text-3xl font-bold text-white" id="stat-users">—</p>
+            <p class="text-slate-400 text-xs mt-1">Total Users</p>
+          </div>
+          <div class="stat-card rounded-xl p-5 text-center">
+            <p class="text-3xl font-bold text-white" id="stat-interactions">
+              —
             </p>
+            <p class="text-slate-400 text-xs mt-1">Total Interactions</p>
+          </div>
+          <div class="stat-card rounded-xl p-5 text-center">
+            <p class="text-3xl font-bold text-white" id="stat-movies">—</p>
+            <p class="text-slate-400 text-xs mt-1">Movies in Catalog</p>
+          </div>
+          <div class="stat-card rounded-xl p-5 text-center">
+            <p class="text-3xl font-bold text-white" id="stat-likes">—</p>
+            <p class="text-slate-400 text-xs mt-1">Likes Recorded</p>
+          </div>
         </div>
+      </section>
 
-        <!-- ── Live Usage Stats ── -->
-        <section>
-            <p class="section-title">Live Usage Stats (SQLite)</p>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="stats-grid">
-                <div class="stat-card rounded-xl p-5 text-center">
-                    <p class="text-3xl font-bold text-white" id="stat-users">—</p>
-                    <p class="text-slate-400 text-xs mt-1">Total Users</p>
-                </div>
-                <div class="stat-card rounded-xl p-5 text-center">
-                    <p class="text-3xl font-bold text-white" id="stat-interactions">—</p>
-                    <p class="text-slate-400 text-xs mt-1">Total Interactions</p>
-                </div>
-                <div class="stat-card rounded-xl p-5 text-center">
-                    <p class="text-3xl font-bold text-white" id="stat-movies">—</p>
-                    <p class="text-slate-400 text-xs mt-1">Movies in Catalog</p>
-                </div>
-                <div class="stat-card rounded-xl p-5 text-center">
-                    <p class="text-3xl font-bold text-white" id="stat-likes">—</p>
-                    <p class="text-slate-400 text-xs mt-1">Likes Recorded</p>
-                </div>
-            </div>
-        </section>
+      <section>
+        <p class="section-title">
+          RQ1 — Model Performance Comparison (Offline Evaluation @ K=10)
+        </p>
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <p class="text-xs text-slate-400 mb-4">
+            Evaluated on 200-user synthetic Nepali IT student cohort (80/20
+            train/test split).
+            <strong class="text-white">Localized_Hybrid</strong> incorporates
+            language + genre preference weighting.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left" id="metrics-table">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                  <th class="py-2 pr-4 font-semibold">Model</th>
+                  <th class="py-2 pr-4 font-semibold">Precision@10</th>
+                  <th class="py-2 pr-4 font-semibold">Recall@10</th>
+                  <th class="py-2 pr-4 font-semibold">NDCG@10</th>
+                  <th class="py-2 pr-4 font-semibold">Filter Bubble ↓</th>
+                  <th class="py-2 pr-4 font-semibold">Lang Diversity ↑</th>
+                </tr>
+              </thead>
+              <tbody id="metrics-body">
+                <tr>
+                  <td
+                    colspan="6"
+                    class="py-4 text-slate-500 italic text-center"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <!-- ── RQ1 Answer: Model Comparison ── -->
-        <section>
-            <p class="section-title">RQ1 — Model Performance Comparison (Offline Evaluation @ K=10)</p>
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-                <p class="text-xs text-slate-400 mb-4">
-                    Evaluated on 200-user synthetic Nepali IT student cohort (80/20 train/test split).
-                    <strong class="text-white">Localized_Hybrid</strong> incorporates language + genre preference weighting.
-                </p>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left" id="metrics-table">
-                        <thead>
-                            <tr class="text-slate-400 border-b border-slate-700">
-                                <th class="py-2 pr-4 font-semibold">Model</th>
-                                <th class="py-2 pr-4 font-semibold">Precision@10</th>
-                                <th class="py-2 pr-4 font-semibold">Recall@10</th>
-                                <th class="py-2 pr-4 font-semibold">NDCG@10</th>
-                                <th class="py-2 pr-4 font-semibold">Filter Bubble ↓</th>
-                                <th class="py-2 pr-4 font-semibold">Lang Diversity ↑</th>
-                            </tr>
-                        </thead>
-                        <tbody id="metrics-body">
-                            <tr><td colspan="6" class="py-4 text-slate-500 italic text-center">Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- RQ1 interpretation note -->
-                <div id="rq1-note" class="mt-4 hidden bg-slate-900 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 space-y-1">
-                </div>
-            </div>
-        </section>
-
-        <!-- ── Charts Row ── -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            <!-- Precision/NDCG Bar chart -->
-            <section class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-                <p class="section-title">Precision@10 by Model (RQ1)</p>
-                <canvas id="chart-precision" height="220"></canvas>
-            </section>
-
-            <!-- Filter Bubble by Archetype -->
-            <section class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-                <p class="section-title">Filter Bubble Score by Cohort Archetype (RQ2)</p>
-                <canvas id="chart-bubble" height="220"></canvas>
-                <p class="text-xs text-slate-500 mt-3">
-                    <strong class="text-slate-300">RQ2 Insight:</strong> Higher filter bubble = more preference-locked recommendations.
-                    CBF &amp; Localized_Hybrid tend to reinforce cultural patterns (Hypothesis 2).
-                </p>
-            </section>
-
+          <div
+            id="rq1-note"
+            class="mt-4 hidden bg-slate-900 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 space-y-1"
+          ></div>
         </div>
+      </section>
 
-        <!-- ── RQ2 Answer: Bias & Diversity ── -->
-        <section>
-            <p class="section-title">RQ2 — Bias &amp; Diversity Breakdown by Archetype</p>
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-                <canvas id="chart-diversity" height="120"></canvas>
-                <p class="text-xs text-slate-500 mt-3">
-                    Language diversity measures how many unique languages appear in the Top-10 list.
-                    CF tends to surface more diverse content; Localized_Hybrid sacrifices diversity for cultural alignment.
-                </p>
-            </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <p class="section-title">Precision@10 by Model (RQ1)</p>
+          <canvas id="chart-precision" height="220"></canvas>
         </section>
 
-        <!-- ── Hypothesis Summary ── -->
-        <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-                <p class="section-title">Hypothesis 1 Result</p>
-                <p class="text-white font-semibold mb-2">Localised Hybrid vs Baselines</p>
-                <div id="h1-result" class="text-sm text-slate-400 space-y-1">Loading...</div>
-            </div>
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-                <p class="section-title">Hypothesis 2 Result</p>
-                <p class="text-white font-semibold mb-2">Filter Bubble Risk</p>
-                <div id="h2-result" class="text-sm text-slate-400 space-y-1">Loading...</div>
-            </div>
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <p class="section-title">
+            Filter Bubble Score by Cohort Archetype (RQ2)
+          </p>
+          <canvas id="chart-bubble" height="220"></canvas>
+          <p class="text-xs text-slate-500 mt-3">
+            <strong class="text-slate-300">RQ2 Insight:</strong> Higher filter
+            bubble = more preference-locked recommendations. CBF &amp;
+            Localized_Hybrid tend to reinforce cultural patterns (Hypothesis 2).
+          </p>
         </section>
+      </div>
 
-        <!-- ── Archetype breakdown table ── -->
-        <section>
-            <p class="section-title">Full Results — By Model &amp; Archetype</p>
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 overflow-x-auto">
-                <table class="w-full text-xs text-left">
-                    <thead>
-                        <tr class="text-slate-400 border-b border-slate-700">
-                            <th class="py-2 pr-3">Model</th>
-                            <th class="py-2 pr-3">Archetype</th>
-                            <th class="py-2 pr-3">P@10</th>
-                            <th class="py-2 pr-3">R@10</th>
-                            <th class="py-2 pr-3">NDCG@10</th>
-                            <th class="py-2 pr-3">Filter Bubble</th>
-                            <th class="py-2 pr-3">Lang Div</th>
-                            <th class="py-2">Genre Div</th>
-                        </tr>
-                    </thead>
-                    <tbody id="full-table-body">
-                        <tr><td colspan="8" class="py-4 text-slate-500 italic text-center">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+      <section>
+        <p class="section-title">
+          RQ2 — Bias &amp; Diversity Breakdown by Archetype
+        </p>
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <canvas id="chart-diversity" height="120"></canvas>
+          <p class="text-xs text-slate-500 mt-3">
+            Language diversity measures how many unique languages appear in the
+            Top-10 list. CF tends to surface more diverse content;
+            Localized_Hybrid sacrifices diversity for cultural alignment.
+          </p>
+        </div>
+      </section>
 
+      <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <p class="section-title">Hypothesis 1 Result</p>
+          <p class="text-white font-semibold mb-2">
+            Localised Hybrid vs Baselines
+          </p>
+          <div id="h1-result" class="text-sm text-slate-400 space-y-1">
+            Loading...
+          </div>
+        </div>
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <p class="section-title">Hypothesis 2 Result</p>
+          <p class="text-white font-semibold mb-2">Filter Bubble Risk</p>
+          <div id="h2-result" class="text-sm text-slate-400 space-y-1">
+            Loading...
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <p class="section-title">Full Results — By Model &amp; Archetype</p>
+        <div
+          class="bg-slate-800 border border-slate-700 rounded-2xl p-5 overflow-x-auto"
+        >
+          <table class="w-full text-xs text-left">
+            <thead>
+              <tr class="text-slate-400 border-b border-slate-700">
+                <th class="py-2 pr-3">Model</th>
+                <th class="py-2 pr-3">Archetype</th>
+                <th class="py-2 pr-3">P@10</th>
+                <th class="py-2 pr-3">R@10</th>
+                <th class="py-2 pr-3">NDCG@10</th>
+                <th class="py-2 pr-3">Filter Bubble</th>
+                <th class="py-2 pr-3">Lang Div</th>
+                <th class="py-2">Genre Div</th>
+              </tr>
+            </thead>
+            <tbody id="full-table-body">
+              <tr>
+                <td colspan="8" class="py-4 text-slate-500 italic text-center">
+                  Loading...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <script>
-        // ── Chart.js global defaults ──────────────────────────────────────────
-        Chart.defaults.color = '#94a3b8';
-        Chart.defaults.borderColor = '#1e293b';
+      Chart.defaults.color = "#94a3b8";
+      Chart.defaults.borderColor = "#1e293b";
 
-        const MODEL_COLORS = {
-            'CF':               'rgba(59,130,246,0.85)',
-            'CBF':              'rgba(16,185,129,0.85)',
-            'NonLocal_Hybrid':  'rgba(249,115,22,0.85)',
-            'Localized_Hybrid': 'rgba(239,68,68,0.9)',
+      const MODEL_COLORS = {
+        CF: "rgba(59,130,246,0.85)",
+        CBF: "rgba(16,185,129,0.85)",
+        NonLocal_Hybrid: "rgba(249,115,22,0.85)",
+        Localized_Hybrid: "rgba(239,68,68,0.9)",
+      };
+      const MODEL_ORDER = ["CF", "CBF", "NonLocal_Hybrid", "Localized_Hybrid"];
+
+      let precisionChart, bubbleChart, diversityChart;
+
+      fetch("/api/admin/stats")
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (d) {
+          document.getElementById("stat-users").textContent = d.total_users;
+          document.getElementById("stat-interactions").textContent =
+            d.total_interactions;
+          document.getElementById("stat-movies").textContent = d.total_movies;
+          document.getElementById("stat-likes").textContent = d.total_likes;
+        })
+        .catch(function () {
+          [
+            "stat-users",
+            "stat-interactions",
+            "stat-movies",
+            "stat-likes",
+          ].forEach(function (id) {
+            document.getElementById(id).textContent = "N/A";
+          });
+        });
+
+      fetch("/api/admin/metrics")
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          buildMetricsTable(data.summary);
+          buildFullTable(data.raw);
+          buildPrecisionChart(data.summary);
+          buildBubbleChart(data.raw);
+          buildDiversityChart(data.raw);
+          buildHypothesisResults(data.summary);
+          buildRQ1Note(data.summary);
+        })
+        .catch(function (err) {
+          console.error("Metrics fetch error:", err);
+          document.getElementById("metrics-body").innerHTML =
+            '<tr><td colspan="6" class="py-4 text-red-400 italic text-center">Could not load evaluation data. Ensure the pipeline has been run.</td></tr>';
+        });
+
+      function buildMetricsTable(summary) {
+        const byModel = {};
+        summary.forEach(function (row) {
+          if (!byModel[row.Model])
+            byModel[row.Model] = { p: [], r: [], n: [], b: [], l: [] };
+          byModel[row.Model].p.push(row["Precision@10"]);
+          byModel[row.Model].r.push(row["Recall@10"]);
+          byModel[row.Model].n.push(row["NDCG@10"]);
+          byModel[row.Model].b.push(row["Filter_Bubble_Score"]);
+          byModel[row.Model].l.push(row["Language_Diversity"]);
+        });
+
+        const avg = function (arr) {
+          return (
+            arr.reduce(function (a, b) {
+              return a + b;
+            }, 0) / arr.length
+          ).toFixed(4);
         };
-        const MODEL_ORDER = ['CF', 'CBF', 'NonLocal_Hybrid', 'Localized_Hybrid'];
-
-        let precisionChart, bubbleChart, diversityChart;
-
-        // ── Fetch live stats ──────────────────────────────────────────────────
-        fetch('/api/admin/stats')
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                document.getElementById('stat-users').textContent        = d.total_users;
-                document.getElementById('stat-interactions').textContent = d.total_interactions;
-                document.getElementById('stat-movies').textContent       = d.total_movies;
-                document.getElementById('stat-likes').textContent        = d.total_likes;
-            })
-            .catch(function() {
-                ['stat-users','stat-interactions','stat-movies','stat-likes']
-                    .forEach(function(id) { document.getElementById(id).textContent = 'N/A'; });
-            });
-
-        // ── Fetch evaluation metrics ──────────────────────────────────────────
-        fetch('/api/admin/metrics')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                buildMetricsTable(data.summary);
-                buildFullTable(data.raw);
-                buildPrecisionChart(data.summary);
-                buildBubbleChart(data.raw);
-                buildDiversityChart(data.raw);
-                buildHypothesisResults(data.summary);
-                buildRQ1Note(data.summary);
-            })
-            .catch(function(err) {
-                console.error('Metrics fetch error:', err);
-                document.getElementById('metrics-body').innerHTML =
-                    '<tr><td colspan="6" class="py-4 text-red-400 italic text-center">Could not load evaluation data. Ensure the pipeline has been run.</td></tr>';
-            });
-
-        // ── Summary metrics table ─────────────────────────────────────────────
-        function buildMetricsTable(summary) {
-            // Average across archetypes per model
-            const byModel = {};
-            summary.forEach(function(row) {
-                if (!byModel[row.Model]) byModel[row.Model] = { p: [], r: [], n: [], b: [], l: [] };
-                byModel[row.Model].p.push(row['Precision@10']);
-                byModel[row.Model].r.push(row['Recall@10']);
-                byModel[row.Model].n.push(row['NDCG@10']);
-                byModel[row.Model].b.push(row['Filter_Bubble_Score']);
-                byModel[row.Model].l.push(row['Language_Diversity']);
-            });
-
-            const avg = function(arr) { return (arr.reduce(function(a,b){return a+b;}, 0) / arr.length).toFixed(4); };
-            const best = {};
-            ['p','r','n','b','l'].forEach(function(k) {
-                let bestVal = -Infinity, bestModel = '';
-                MODEL_ORDER.forEach(function(m) {
-                    if (!byModel[m]) return;
-                    const v = parseFloat(avg(byModel[m][k]));
-                    if ((k === 'b' ? v < parseFloat(avg(byModel[bestModel] ? byModel[bestModel][k] : [])) : v > bestVal) || bestModel === '') {
-                        bestVal = v; bestModel = m;
-                    }
-                });
-                best[k] = bestModel;
-            });
-
-            // pick best by precision
-            let bestP = '', bestPVal = -1;
-            MODEL_ORDER.forEach(function(m) {
-                if (!byModel[m]) return;
-                const v = parseFloat(avg(byModel[m].p));
-                if (v > bestPVal) { bestPVal = v; bestP = m; }
-            });
-
-            const tbody = document.getElementById('metrics-body');
-            tbody.innerHTML = '';
-            MODEL_ORDER.forEach(function(m) {
-                if (!byModel[m]) return;
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-slate-700/50 ' + (m === bestP ? 'model-best' : '');
-                tr.innerHTML =
-                    '<td class="py-2 pr-4 font-semibold ' + (m === 'Localized_Hybrid' ? 'text-red-400' : 'text-white') + '">' +
-                        (m === bestP ? '🏆 ' : '') + m +
-                    '</td>' +
-                    '<td class="py-2 pr-4 font-mono text-slate-200">' + avg(byModel[m].p) + '</td>' +
-                    '<td class="py-2 pr-4 font-mono text-slate-200">' + avg(byModel[m].r) + '</td>' +
-                    '<td class="py-2 pr-4 font-mono text-slate-200">' + avg(byModel[m].n) + '</td>' +
-                    '<td class="py-2 pr-4 font-mono text-amber-300">' + avg(byModel[m].b) + '</td>' +
-                    '<td class="py-2 pr-4 font-mono text-sky-300">'   + parseFloat(avg(byModel[m].l)).toFixed(2) + '</td>';
-                tbody.appendChild(tr);
-            });
-        }
-
-        // ── Precision bar chart ───────────────────────────────────────────────
-        function buildPrecisionChart(summary) {
-            const byModel = {};
-            summary.forEach(function(row) {
-                if (!byModel[row.Model]) byModel[row.Model] = [];
-                byModel[row.Model].push(row['Precision@10']);
-            });
-            const avg = function(arr) { return arr.reduce(function(a,b){return a+b;},0)/arr.length; };
-            const labels = MODEL_ORDER.filter(function(m){ return !!byModel[m]; });
-            const values = labels.map(function(m){ return avg(byModel[m]); });
-            const colors = labels.map(function(m){ return MODEL_COLORS[m]; });
-
-            precisionChart = new Chart(document.getElementById('chart-precision'), {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Avg Precision@10',
-                        data: values,
-                        backgroundColor: colors,
-                        borderRadius: 6,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true, max: 0.15, grid: { color: '#1e293b' } }, x: { grid: { display: false } } }
-                }
-            });
-        }
-
-        // ── Filter Bubble by archetype chart ─────────────────────────────────
-        function buildBubbleChart(raw) {
-            const archetypes = [...new Set(raw.map(function(r){ return r.Archetype; }))].sort();
-            const datasets = MODEL_ORDER.map(function(m) {
-                return {
-                    label: m,
-                    data: archetypes.map(function(a) {
-                        const rows = raw.filter(function(r){ return r.Model === m && r.Archetype === a; });
-                        return rows.length ? rows[0]['Filter_Bubble_Score'] : 0;
-                    }),
-                    backgroundColor: MODEL_COLORS[m],
-                    borderRadius: 4,
-                };
-            });
-            bubbleChart = new Chart(document.getElementById('chart-bubble'), {
-                type: 'bar',
-                data: { labels: archetypes, datasets: datasets },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } } },
-                    scales: {
-                        y: { beginAtZero: true, max: 1.05, grid: { color: '#1e293b' }, title: { display: true, text: 'Filter Bubble Score' } },
-                        x: { grid: { display: false } }
-                    }
-                }
-            });
-        }
-
-        // ── Language diversity grouped bar ────────────────────────────────────
-        function buildDiversityChart(raw) {
-            const archetypes = [...new Set(raw.map(function(r){ return r.Archetype; }))].sort();
-            const datasets = MODEL_ORDER.map(function(m) {
-                return {
-                    label: m,
-                    data: archetypes.map(function(a) {
-                        const rows = raw.filter(function(r){ return r.Model === m && r.Archetype === a; });
-                        return rows.length ? rows[0]['Language_Diversity'] : 0;
-                    }),
-                    backgroundColor: MODEL_COLORS[m],
-                    borderRadius: 4,
-                };
-            });
-            diversityChart = new Chart(document.getElementById('chart-diversity'), {
-                type: 'bar',
-                data: { labels: archetypes, datasets: datasets },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } } },
-                    scales: {
-                        y: { beginAtZero: true, grid: { color: '#1e293b' }, title: { display: true, text: 'Unique Languages in Top-10' } },
-                        x: { grid: { display: false } }
-                    }
-                }
-            });
-        }
-
-        // ── Full archetype table ──────────────────────────────────────────────
-        function buildFullTable(raw) {
-            const tbody = document.getElementById('full-table-body');
-            tbody.innerHTML = '';
-            raw.forEach(function(row) {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-slate-700/40 ' + (row.Model === 'Localized_Hybrid' ? 'text-red-300' : 'text-slate-300');
-                tr.innerHTML =
-                    '<td class="py-1.5 pr-3 font-medium">' + row.Model + '</td>' +
-                    '<td class="py-1.5 pr-3">' + row.Archetype + '</td>' +
-                    '<td class="py-1.5 pr-3 font-mono">' + (row['Precision@10'] || 0).toFixed(4) + '</td>' +
-                    '<td class="py-1.5 pr-3 font-mono">' + (row['Recall@10'] || 0).toFixed(4) + '</td>' +
-                    '<td class="py-1.5 pr-3 font-mono">' + (row['NDCG@10'] || 0).toFixed(4) + '</td>' +
-                    '<td class="py-1.5 pr-3 font-mono text-amber-300">' + (row['Filter_Bubble_Score'] || 0).toFixed(4) + '</td>' +
-                    '<td class="py-1.5 pr-3 font-mono text-sky-300">'   + (row['Language_Diversity'] || 0).toFixed(2) + '</td>' +
-                    '<td class="py-1.5 font-mono">'                      + (row['Genre_Diversity'] || 0).toFixed(2) + '</td>';
-                tbody.appendChild(tr);
-            });
-        }
-
-        // ── Hypothesis panels ─────────────────────────────────────────────────
-        function buildHypothesisResults(summary) {
-            const byModel = {};
-            summary.forEach(function(row) {
-                if (!byModel[row.Model]) byModel[row.Model] = { p: [], b: [] };
-                byModel[row.Model].p.push(row['Precision@10']);
-                byModel[row.Model].b.push(row['Filter_Bubble_Score']);
-            });
-            const avg = function(arr) { return arr.reduce(function(a,b){return a+b;},0)/arr.length; };
-
-            const lh = byModel['Localized_Hybrid'];
-            const cf = byModel['CF'];
-            const cbf = byModel['CBF'];
-            const nl  = byModel['NonLocal_Hybrid'];
-
-            if (lh && cf) {
-                const lhP = avg(lh.p), cfP = avg(cf.p), cbfP = cbf ? avg(cbf.p) : 0, nlP = nl ? avg(nl.p) : 0;
-                const best = Math.max(cfP, cbfP, nlP);
-                const h1Div = document.getElementById('h1-result');
-
-                const supported = lhP >= best;
-                h1Div.innerHTML =
-                    '<p class="' + (supported ? 'text-green-400' : 'text-yellow-400') + ' font-bold mb-1">' +
-                        (supported ? '✅ Hypothesis Supported' : '⚠ Hypothesis Not Confirmed') +
-                    '</p>' +
-                    '<p>Localized_Hybrid Precision@10: <span class="text-white font-mono">' + lhP.toFixed(4) + '</span></p>' +
-                    '<p>Best Baseline Precision@10: <span class="text-white font-mono">' + best.toFixed(4) + '</span></p>' +
-                    '<p class="mt-2 text-slate-400">The localised model ' +
-                        (supported ? 'outperforms or matches' : 'does not outperform') +
-                        ' baselines. This is valid research output — negative or null results are expected in small synthetic cohorts and are discussable in the thesis.</p>';
-
-                const h2Div = document.getElementById('h2-result');
-                const lhB = avg(lh.b);
-                const cfB = avg(cf.b);
-                h2Div.innerHTML =
-                    '<p class="text-amber-400 font-bold mb-1">⚠ Filter Bubble Risk Detected</p>' +
-                    '<p>Localized_Hybrid Bubble Score: <span class="text-white font-mono">' + lhB.toFixed(4) + '</span></p>' +
-                    '<p>CF Bubble Score: <span class="text-white font-mono">' + cfB.toFixed(4) + '</span></p>' +
-                    '<p class="mt-2 text-slate-400">Higher bubble score in Localized_Hybrid confirms Hypothesis 2: demographic weighting reinforces existing cultural preferences and may narrow content diversity. Discuss in Chapter 5 (Ethics / RQ2).</p>';
+        const best = {};
+        ["p", "r", "n", "b", "l"].forEach(function (k) {
+          let bestVal = -Infinity,
+            bestModel = "";
+          MODEL_ORDER.forEach(function (m) {
+            if (!byModel[m]) return;
+            const v = parseFloat(avg(byModel[m][k]));
+            if (
+              (k === "b"
+                ? v <
+                  parseFloat(
+                    avg(byModel[bestModel] ? byModel[bestModel][k] : []),
+                  )
+                : v > bestVal) ||
+              bestModel === ""
+            ) {
+              bestVal = v;
+              bestModel = m;
             }
-        }
+          });
+          best[k] = bestModel;
+        });
 
-        // ── RQ1 Note ──────────────────────────────────────────────────────────
-        function buildRQ1Note(summary) {
-            const note = document.getElementById('rq1-note');
-            note.classList.remove('hidden');
-            note.innerHTML =
-                '<p class="text-slate-300 font-semibold mb-1">📖 How to read this for your thesis:</p>' +
-                '<p>• <strong class="text-white">Precision@10</strong> = fraction of Top-10 recs that were actually rated ≥4.0 by the user in the test set.</p>' +
-                '<p>• <strong class="text-white">NDCG@10</strong> = ranking quality (higher-ranked correct items score more).</p>' +
-                '<p>• <strong class="text-white">Filter Bubble</strong> = fraction of Top-10 matching the user\'s explicit preferences (high = echo chamber risk).</p>' +
-                '<p class="mt-2 text-slate-400">Even if Precision is low or similar across models, the <em>diversity and filter bubble differences</em> between Localised_Hybrid and CF directly answer RQ2 and are publishable observations.</p>';
+        let bestP = "",
+          bestPVal = -1;
+        MODEL_ORDER.forEach(function (m) {
+          if (!byModel[m]) return;
+          const v = parseFloat(avg(byModel[m].p));
+          if (v > bestPVal) {
+            bestPVal = v;
+            bestP = m;
+          }
+        });
+
+        const tbody = document.getElementById("metrics-body");
+        tbody.innerHTML = "";
+        MODEL_ORDER.forEach(function (m) {
+          if (!byModel[m]) return;
+          const tr = document.createElement("tr");
+          tr.className =
+            "border-b border-slate-700/50 " + (m === bestP ? "model-best" : "");
+          tr.innerHTML =
+            '<td class="py-2 pr-4 font-semibold ' +
+            (m === "Localized_Hybrid" ? "text-red-400" : "text-white") +
+            '">' +
+            (m === bestP ? "🏆 " : "") +
+            m +
+            "</td>" +
+            '<td class="py-2 pr-4 font-mono text-slate-200">' +
+            avg(byModel[m].p) +
+            "</td>" +
+            '<td class="py-2 pr-4 font-mono text-slate-200">' +
+            avg(byModel[m].r) +
+            "</td>" +
+            '<td class="py-2 pr-4 font-mono text-slate-200">' +
+            avg(byModel[m].n) +
+            "</td>" +
+            '<td class="py-2 pr-4 font-mono text-amber-300">' +
+            avg(byModel[m].b) +
+            "</td>" +
+            '<td class="py-2 pr-4 font-mono text-sky-300">' +
+            parseFloat(avg(byModel[m].l)).toFixed(2) +
+            "</td>";
+          tbody.appendChild(tr);
+        });
+      }
+
+      function buildPrecisionChart(summary) {
+        const byModel = {};
+        summary.forEach(function (row) {
+          if (!byModel[row.Model]) byModel[row.Model] = [];
+          byModel[row.Model].push(row["Precision@10"]);
+        });
+        const avg = function (arr) {
+          return (
+            arr.reduce(function (a, b) {
+              return a + b;
+            }, 0) / arr.length
+          );
+        };
+        const labels = MODEL_ORDER.filter(function (m) {
+          return !!byModel[m];
+        });
+        const values = labels.map(function (m) {
+          return avg(byModel[m]);
+        });
+        const colors = labels.map(function (m) {
+          return MODEL_COLORS[m];
+        });
+
+        precisionChart = new Chart(document.getElementById("chart-precision"), {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Avg Precision@10",
+                data: values,
+                backgroundColor: colors,
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, max: 0.15, grid: { color: "#1e293b" } },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      function buildBubbleChart(raw) {
+        const archetypes = [
+          ...new Set(
+            raw.map(function (r) {
+              return r.Archetype;
+            }),
+          ),
+        ].sort();
+        const datasets = MODEL_ORDER.map(function (m) {
+          return {
+            label: m,
+            data: archetypes.map(function (a) {
+              const rows = raw.filter(function (r) {
+                return r.Model === m && r.Archetype === a;
+              });
+              return rows.length ? rows[0]["Filter_Bubble_Score"] : 0;
+            }),
+            backgroundColor: MODEL_COLORS[m],
+            borderRadius: 4,
+          };
+        });
+        bubbleChart = new Chart(document.getElementById("chart-bubble"), {
+          type: "bar",
+          data: { labels: archetypes, datasets: datasets },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: { boxWidth: 12, padding: 12 },
+              },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 1.05,
+                grid: { color: "#1e293b" },
+                title: { display: true, text: "Filter Bubble Score" },
+              },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      function buildDiversityChart(raw) {
+        const archetypes = [
+          ...new Set(
+            raw.map(function (r) {
+              return r.Archetype;
+            }),
+          ),
+        ].sort();
+        const datasets = MODEL_ORDER.map(function (m) {
+          return {
+            label: m,
+            data: archetypes.map(function (a) {
+              const rows = raw.filter(function (r) {
+                return r.Model === m && r.Archetype === a;
+              });
+              return rows.length ? rows[0]["Language_Diversity"] : 0;
+            }),
+            backgroundColor: MODEL_COLORS[m],
+            borderRadius: 4,
+          };
+        });
+        diversityChart = new Chart(document.getElementById("chart-diversity"), {
+          type: "bar",
+          data: { labels: archetypes, datasets: datasets },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: { boxWidth: 12, padding: 12 },
+              },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: { color: "#1e293b" },
+                title: { display: true, text: "Unique Languages in Top-10" },
+              },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      function buildFullTable(raw) {
+        const tbody = document.getElementById("full-table-body");
+        tbody.innerHTML = "";
+        raw.forEach(function (row) {
+          const tr = document.createElement("tr");
+          tr.className =
+            "border-b border-slate-700/40 " +
+            (row.Model === "Localized_Hybrid"
+              ? "text-red-300"
+              : "text-slate-300");
+          tr.innerHTML =
+            '<td class="py-1.5 pr-3 font-medium">' +
+            row.Model +
+            "</td>" +
+            '<td class="py-1.5 pr-3">' +
+            row.Archetype +
+            "</td>" +
+            '<td class="py-1.5 pr-3 font-mono">' +
+            (row["Precision@10"] || 0).toFixed(4) +
+            "</td>" +
+            '<td class="py-1.5 pr-3 font-mono">' +
+            (row["Recall@10"] || 0).toFixed(4) +
+            "</td>" +
+            '<td class="py-1.5 pr-3 font-mono">' +
+            (row["NDCG@10"] || 0).toFixed(4) +
+            "</td>" +
+            '<td class="py-1.5 pr-3 font-mono text-amber-300">' +
+            (row["Filter_Bubble_Score"] || 0).toFixed(4) +
+            "</td>" +
+            '<td class="py-1.5 pr-3 font-mono text-sky-300">' +
+            (row["Language_Diversity"] || 0).toFixed(2) +
+            "</td>" +
+            '<td class="py-1.5 font-mono">' +
+            (row["Genre_Diversity"] || 0).toFixed(2) +
+            "</td>";
+          tbody.appendChild(tr);
+        });
+      }
+
+      function buildHypothesisResults(summary) {
+        const byModel = {};
+        summary.forEach(function (row) {
+          if (!byModel[row.Model]) byModel[row.Model] = { p: [], b: [] };
+          byModel[row.Model].p.push(row["Precision@10"]);
+          byModel[row.Model].b.push(row["Filter_Bubble_Score"]);
+        });
+        const avg = function (arr) {
+          return (
+            arr.reduce(function (a, b) {
+              return a + b;
+            }, 0) / arr.length
+          );
+        };
+
+        const lh = byModel["Localized_Hybrid"];
+        const cf = byModel["CF"];
+        const cbf = byModel["CBF"];
+        const nl = byModel["NonLocal_Hybrid"];
+
+        if (lh && cf) {
+          const lhP = avg(lh.p),
+            cfP = avg(cf.p),
+            cbfP = cbf ? avg(cbf.p) : 0,
+            nlP = nl ? avg(nl.p) : 0;
+          const best = Math.max(cfP, cbfP, nlP);
+          const h1Div = document.getElementById("h1-result");
+
+          const supported = lhP >= best;
+          h1Div.innerHTML =
+            '<p class="' +
+            (supported ? "text-green-400" : "text-yellow-400") +
+            ' font-bold mb-1">' +
+            (supported
+              ? "✅ Hypothesis Supported"
+              : "⚠ Hypothesis Not Confirmed") +
+            "</p>" +
+            '<p>Localized_Hybrid Precision@10: <span class="text-white font-mono">' +
+            lhP.toFixed(4) +
+            "</span></p>" +
+            '<p>Best Baseline Precision@10: <span class="text-white font-mono">' +
+            best.toFixed(4) +
+            "</span></p>" +
+            '<p class="mt-2 text-slate-400">The localised model ' +
+            (supported ? "outperforms or matches" : "does not outperform") +
+            " baselines. This is valid research output — negative or null results are expected in small synthetic cohorts and are discussable in the thesis.</p>";
+
+          const h2Div = document.getElementById("h2-result");
+          const lhB = avg(lh.b);
+          const cfB = avg(cf.b);
+          h2Div.innerHTML =
+            '<p class="text-amber-400 font-bold mb-1">⚠ Filter Bubble Risk Detected</p>' +
+            '<p>Localized_Hybrid Bubble Score: <span class="text-white font-mono">' +
+            lhB.toFixed(4) +
+            "</span></p>" +
+            '<p>CF Bubble Score: <span class="text-white font-mono">' +
+            cfB.toFixed(4) +
+            "</span></p>" +
+            '<p class="mt-2 text-slate-400">Higher bubble score in Localized_Hybrid confirms Hypothesis 2: demographic weighting reinforces existing cultural preferences and may narrow content diversity. Discuss in Chapter 5 (Ethics / RQ2).</p>';
         }
+      }
+
+      function buildRQ1Note(summary) {
+        const note = document.getElementById("rq1-note");
+        note.classList.remove("hidden");
+        note.innerHTML =
+          '<p class="text-slate-300 font-semibold mb-1">📖 How to read this for your thesis:</p>' +
+          '<p>• <strong class="text-white">Precision@10</strong> = fraction of Top-10 recs that were actually rated ≥4.0 by the user in the test set.</p>' +
+          '<p>• <strong class="text-white">NDCG@10</strong> = ranking quality (higher-ranked correct items score more).</p>' +
+          '<p>• <strong class="text-white">Filter Bubble</strong> = fraction of Top-10 matching the user\'s explicit preferences (high = echo chamber risk).</p>' +
+          '<p class="mt-2 text-slate-400">Even if Precision is low or similar across models, the <em>diversity and filter bubble differences</em> between Localised_Hybrid and CF directly answer RQ2 and are publishable observations.</p>';
+      }
     </script>
-
-</body>
+  </body>
 </html>

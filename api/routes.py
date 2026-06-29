@@ -49,9 +49,6 @@ else:
         f"{SYNTH_PROFILES_PATH}"
     )
 
-
-# ── Login / Home ─────────────────────────────────────────────────────────────
-
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse(
@@ -112,9 +109,6 @@ async def login(
         status_code=303,
     )
 
-
-# ── Register ─────────────────────────────────────────────────────────────────
-
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     return templates.TemplateResponse(
@@ -138,7 +132,6 @@ async def register(
     if not username:
         raise HTTPException(status_code=400, detail="Username cannot be empty")
 
-    # Check for duplicate
     existing = (
         db.query(User)
         .filter(User.username == username)
@@ -168,9 +161,6 @@ async def register(
         url=f"/dashboard?user_id={user.id}",
         status_code=303,
     )
-
-
-# ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
@@ -228,9 +218,6 @@ async def dashboard(
         },
     )
 
-
-# ── Interaction logging ───────────────────────────────────────────────────────
-
 @router.post("/api/interact")
 async def log_interaction(
     user_id: int = Form(...),
@@ -273,9 +260,6 @@ async def log_interaction(
             f"for movie {movie_id}"
         ),
     }
-
-
-# ── Admin ─────────────────────────────────────────────────────────────────────
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
@@ -330,5 +314,5 @@ async def admin_metrics():
 
     return JSONResponse({
         "raw": raw_rows,
-        "summary": raw_rows,   # already grouped by Model+Archetype from eval script
+        "summary": raw_rows,  
     })

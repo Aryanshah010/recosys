@@ -45,7 +45,7 @@ class HybridFusionEngine:
             
         self.popularity_dict = dict(zip(self.movies_catalog['movieId'], self.movies_catalog['pop_norm']))
         
-        print("✅ Hybrid Fusion Engine Ready.")
+        print("Hybrid Fusion Engine Ready.")
 
     def _normalize_preferences(self, user_profile):
         raw_langs = str(user_profile.get('preferred_languages', '')).split('|')
