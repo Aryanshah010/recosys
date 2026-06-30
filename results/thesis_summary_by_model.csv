@@ -1,0 +1,7 @@
+,Precision@10,Precision@10,Recall@10,Recall@10,NDCG@10,NDCG@10,Filter_Bubble_Score,Filter_Bubble_Score,Language_Diversity,Genre_Diversity,Novelty@10,Novelty@10
+,mean,std,mean,std,mean,std,mean,std,mean,mean,mean,std
+Model,,,,,,,,,,,,
+CBF,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,2.8714,0.0,0.0
+CF,0.0007,0.0085,0.0024,0.0282,0.0036,0.0423,0.9343,0.0829,1.6571,8.0929,0.0657,0.0829
+Localized_Hybrid,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,3.9429,0.0,0.0
+NonLocal_Hybrid,0.0,0.0,0.0,0.0,0.0,0.0,0.9864,0.0344,1.1357,4.8357,0.0136,0.0344

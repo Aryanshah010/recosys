@@ -19,9 +19,7 @@ router = APIRouter()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = BASE_DIR / "api" / "templates"
-SYNTH_PROFILES_PATH = (
-    BASE_DIR / "data" / "processed" / "synthetic_user_profiles.csv"
-)
+SYNTH_PROFILES_PATH = BASE_DIR / "data" / "processed" / "synthetic_user_profiles.csv"
 EVAL_RESULTS_PATH = BASE_DIR / "results" / "thesis_evaluation_metrics.csv"
 
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -44,10 +42,8 @@ if SYNTH_PROFILES_PATH.exists():
     print(f"Loaded {len(synth_df)} synthetic users")
 
 else:
-    print(
-        f"Synthetic profile file not found: "
-        f"{SYNTH_PROFILES_PATH}"
-    )
+    print(f"Synthetic profile file not found: {SYNTH_PROFILES_PATH}")
+
 
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -65,14 +61,9 @@ async def login(
 ):
     user_id = str(user_id)
 
-    user = (
-        db.query(User)
-        .filter(User.username == user_id)
-        .first()
-    )
+    user = db.query(User).filter(User.username == user_id).first()
 
     if user is None:
-
         if synth_df is None:
             raise HTTPException(
                 status_code=500,
@@ -92,12 +83,8 @@ async def login(
         user = User(
             username=user_id,
             password_hash="synthetic_hash",
-            preferred_genres=str(
-                profile.get("preferred_genres", "")
-            ),
-            preferred_languages=str(
-                profile.get("preferred_languages", "")
-            ),
+            preferred_genres=str(profile.get("preferred_genres", "")),
+            preferred_languages=str(profile.get("preferred_languages", "")),
         )
 
         db.add(user)
@@ -108,6 +95,7 @@ async def login(
         url=f"/dashboard?user_id={user.id}",
         status_code=303,
     )
+
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
@@ -132,11 +120,7 @@ async def register(
     if not username:
         raise HTTPException(status_code=400, detail="Username cannot be empty")
 
-    existing = (
-        db.query(User)
-        .filter(User.username == username)
-        .first()
-    )
+    existing = db.query(User).filter(User.username == username).first()
     if existing:
         return RedirectResponse(
             url=f"/dashboard?user_id={existing.id}",
@@ -162,17 +146,14 @@ async def register(
         status_code=303,
     )
 
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
     user_id: int,
     db: Session = Depends(get_db),
 ):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
+    user = db.query(User).filter(User.id == user_id).first()
 
     if user is None:
         raise HTTPException(
@@ -180,16 +161,9 @@ async def dashboard(
             detail="User not found",
         )
 
-    interactions = (
-        db.query(Interaction)
-        .filter(Interaction.user_id == user.id)
-        .all()
-    )
+    interactions = db.query(Interaction).filter(Interaction.user_id == user.id).all()
 
-    history = [
-        interaction.movie_id
-        for interaction in interactions
-    ]
+    history = [interaction.movie_id for interaction in interactions]
 
     user_profile = {
         "preferred_languages": user.preferred_languages,
@@ -217,6 +191,7 @@ async def dashboard(
             "history_count": len(history),
         },
     )
+
 
 @router.post("/api/interact")
 async def log_interaction(
@@ -255,11 +230,9 @@ async def log_interaction(
 
     return {
         "status": "success",
-        "message": (
-            f"Logged {action} "
-            f"for movie {movie_id}"
-        ),
+        "message": (f"Logged {action} for movie {movie_id}"),
     }
+
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
@@ -276,17 +249,17 @@ async def admin_stats(db: Session = Depends(get_db)):
     total_interactions = db.query(Interaction).count()
     total_movies = db.query(Movie).count()
     total_likes = (
-        db.query(Interaction)
-        .filter(Interaction.interaction_type == "like")
-        .count()
+        db.query(Interaction).filter(Interaction.interaction_type == "like").count()
     )
 
-    return JSONResponse({
-        "total_users": total_users,
-        "total_interactions": total_interactions,
-        "total_movies": total_movies,
-        "total_likes": total_likes,
-    })
+    return JSONResponse(
+        {
+            "total_users": total_users,
+            "total_interactions": total_interactions,
+            "total_movies": total_movies,
+            "total_likes": total_likes,
+        }
+    )
 
 
 @router.get("/api/admin/metrics")
@@ -301,18 +274,22 @@ async def admin_metrics():
     with open(EVAL_RESULTS_PATH, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            raw_rows.append({
-                "Model": row.get("Model", ""),
-                "Archetype": row.get("Archetype", ""),
-                "Precision@10": float(row.get("Precision@10", 0)),
-                "Recall@10": float(row.get("Recall@10", 0)),
-                "NDCG@10": float(row.get("NDCG@10", 0)),
-                "Filter_Bubble_Score": float(row.get("Filter_Bubble_Score", 0)),
-                "Language_Diversity": float(row.get("Language_Diversity", 0)),
-                "Genre_Diversity": float(row.get("Genre_Diversity", 0)),
-            })
+            raw_rows.append(
+                {
+                    "Model": row.get("Model", ""),
+                    "Archetype": row.get("Archetype", ""),
+                    "Precision@10": float(row.get("Precision@10", 0)),
+                    "Recall@10": float(row.get("Recall@10", 0)),
+                    "NDCG@10": float(row.get("NDCG@10", 0)),
+                    "Filter_Bubble_Score": float(row.get("Filter_Bubble_Score", 0)),
+                    "Language_Diversity": float(row.get("Language_Diversity", 0)),
+                    "Genre_Diversity": float(row.get("Genre_Diversity", 0)),
+                }
+            )
 
-    return JSONResponse({
-        "raw": raw_rows,
-        "summary": raw_rows,  
-    })
+    return JSONResponse(
+        {
+            "raw": raw_rows,
+            "summary": raw_rows,
+        }
+    )

@@ -140,8 +140,8 @@ def main():
         if not success:
             print_banner("PIPELINE HALTED", "!")
             print(f"  Failed at Step {i}/{total_steps}: {description}")
-            print(f"  Fix the error above and re-run: python main.py")
-            print(f"  Completed steps will be skipped via artifact checks.\n")
+            print("  Fix the error above and re-run: python main.py")
+            print("  Completed steps will be skipped via artifact checks.\n")
             sys.exit(1)
 
         check_artifacts(artifacts, description)
@@ -153,8 +153,8 @@ def main():
     print(f"  Steps completed:  {completed_steps}/{total_steps}")
     print(f"  Total time:       {total_elapsed:.1f}s ({total_elapsed/60:.1f} min)")
     print(f"  Results saved to: {RESULTS_DIR / 'thesis_evaluation_metrics.csv'}")
-    print(f"\n Open the results CSV to extract tables for Chapter 4.")
-    print(f"  Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")
+    print("\n Open the results CSV to extract tables for Chapter 4.")
+    print("  Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")
     print()
 
 
