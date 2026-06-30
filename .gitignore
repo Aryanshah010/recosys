@@ -39,12 +39,6 @@ data/processed/app.db
 */.ipynb_checkpoints/*
 .ipython/
 
-notebooks/plots/
-*.png
-*.jpg
-*.jpeg
-*.pdf
-
 !architect_hybrid_system.png
 
 __pycache__/
