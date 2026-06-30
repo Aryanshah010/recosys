@@ -86,7 +86,7 @@ class CBFEngine:
         if movie_row["language"] in pref_langs:
             score += 0.6
 
-        movie_genres = set(movie_row["clean_genres"].split())
+        movie_genres = set(str(movie_row["clean_genres"]).split()) if pd.notna(movie_row["clean_genres"]) else set()
         if not movie_genres.isdisjoint(pref_genres):
             score += 0.4
 
@@ -98,8 +98,6 @@ class CBFEngine:
         valid_liked_ids = [m for m in liked_movie_ids if m in self.indices.index]
 
         has_cf_signal = len(valid_liked_ids) > 0
-
-        scores = np.zeros(len(self.df))
 
         if has_cf_signal:
             idxs = [self.indices[m] for m in valid_liked_ids]
@@ -125,13 +123,13 @@ class CBFEngine:
             popularity_penalty = np.where(self.df["popularity_score"] > 0.9, 0.8, 1.0)
             final_scores = final_scores * popularity_penalty
 
-        results = self.df[["movieId", "title_x", "clean_genres", "language"]].copy()
+        results = self.df[["movieId", "title", "clean_genres", "language"]].copy()
         results["final_score"] = final_scores
 
         results = results[~results["movieId"].isin(valid_liked_ids)]
 
         results = results.sort_values(by="final_score", ascending=False).head(k)
-        return results.rename(columns={"title_x": "title"})
+        return results
 
 
 if __name__ == "__main__":

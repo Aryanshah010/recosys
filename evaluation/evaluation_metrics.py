@@ -41,7 +41,7 @@ def normalize_prefs(profile):
     langs = set(
         [
             LANGUAGE_MAPPING.get(l.strip().upper(), l.strip().upper())
-            for l in langs_raw
+            for l in langs_raw  # noqa: E741
             if l.strip()
         ]
     )

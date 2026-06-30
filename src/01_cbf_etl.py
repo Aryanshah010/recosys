@@ -23,7 +23,7 @@ def parse_genres(x):
     try:
         genres = ast.literal_eval(x)
         return " ".join([g["name"].replace("-", "").replace(" ", "") for g in genres])
-    except:
+    except:  # noqa: E722
         return "Unknown"
 
 
@@ -44,10 +44,11 @@ tmdb_mapped = pd.merge(
 
 cbf_items = pd.merge(ml_movies, tmdb_mapped, on="movieId", how="inner")
 
-cbf_items["soup"] = cbf_items["clean_genres"] + " " + cbf_items["language"]
+cbf_items["soup"] = cbf_items["clean_genres"].astype(str) + " " + cbf_items["language"].astype(str)
 
 os.makedirs("data/processed", exist_ok=True)
+cbf_items.rename(columns={"title_x": "title"}, inplace=True)
 cbf_items[
-    ["movieId", "title_x", "clean_genres", "language", "vote_count", "soup"]
+    ["movieId", "title", "clean_genres", "language", "vote_count", "soup"]
 ].to_csv(OUTPUT_PATH, index=False)
 print(f"Success! Saved {len(cbf_items)} matched items to {OUTPUT_PATH}")

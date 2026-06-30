@@ -1,6 +1,6 @@
 import pandas as pd
 from api.db import engine, SessionLocal, Base
-from api.models import User, Movie, Interaction, EvaluationMetric
+from api.models import  Movie
 
 def init_db():
     print("Initializing database tables...")

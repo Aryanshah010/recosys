@@ -2,7 +2,6 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import pickle
-import os
 
 INPUT_PATH = "data/processed/cbf_items.csv"
 MATRIX_OUT = "data/processed/cbf_matrix.pkl"

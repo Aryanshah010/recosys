@@ -12,7 +12,7 @@ def parse_tmdb_genres(genre_str):
     try:
         genres = ast.literal_eval(genre_str)
         return "|".join([g["name"].replace(" ", "").replace("-", "") for g in genres])
-    except:
+    except:  # noqa: E722
         return "Unknown"
 
 
@@ -125,7 +125,9 @@ def main():
     cbf_items = catalog_df[
         ["movieId", "title", "clean_genres", "language", "vote_count"]
     ].copy()
-    cbf_items["soup"] = cbf_items["clean_genres"] + " " + cbf_items["language"]
+    cbf_items["soup"] = (
+        cbf_items["clean_genres"].astype(str) + " " + cbf_items["language"].astype(str)
+    )
     cbf_items.to_csv(os.path.join(PROCESSED_DIR, "cbf_items.csv"), index=False)
 
     print("\nPipeline execution complete. Files saved to data/processed/")

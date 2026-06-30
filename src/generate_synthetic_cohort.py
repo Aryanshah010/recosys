@@ -1,11 +1,23 @@
-import pandas as pd
-import numpy as np
+from __future__ import annotations
+
 import os
 import random
+from typing import TypedDict
+
+import numpy as np
+import pandas as pd
 
 CATALOG_PATH = "data/processed/movies_final.csv"
 REAL_RATINGS_PATH = "data/processed/ratings_final.csv"
 PROCESSED_DIR = "data/processed"
+
+
+class Archetype(TypedDict):
+    name: str
+    count: int
+    langs: list[str]
+    genres: list[str]
+
 
 print("Loading validated movie catalog and real ratings...")
 movies = pd.read_csv(CATALOG_PATH)
@@ -15,11 +27,11 @@ movies["clean_genres"] = movies["clean_genres"].fillna("").astype(str)
 movies["language"] = movies["language"].fillna("").astype(str).str.upper()
 
 rating_distribution = real_ratings["rating"].value_counts(normalize=True).sort_index()
-rating_values = rating_distribution.index.values
-rating_probs = rating_distribution.values
+rating_values: np.ndarray = np.asarray(rating_distribution.index, dtype=np.float64)
+rating_probs: np.ndarray = np.asarray(rating_distribution.values, dtype=np.float64)
 
 
-archetypes = [
+archetypes: list[Archetype] = [
     {
         "name": "A_Techie",
         "count": 50,
@@ -46,22 +58,22 @@ archetypes = [
     },
 ]
 
-synthetic_users = []
-synthetic_ratings = []
+synthetic_users: list[dict] = []
+synthetic_ratings: list[dict] = []
 user_id_counter = 1000000
 
 print("Generating Synthetic Cohort & Validated Interactions...")
 for arch in archetypes:
-    mask_lang = movies["language"].isin(arch["langs"])
-    mask_genre = movies["clean_genres"].apply(
-        lambda x: any(g in x for g in arch["genres"])
-    )
+    langs: list[str] = arch["langs"]
+    genres: list[str] = arch["genres"]
+    mask_lang = movies["language"].isin(langs)
+    mask_genre = movies["clean_genres"].apply(lambda x: any(g in x for g in genres))
     preferred_movies = movies[mask_lang | mask_genre]
 
     if len(preferred_movies) < 50:
         preferred_movies = movies.head(500)
 
-    for i in range(arch["count"]):
+    for _ in range(arch["count"]):
         uid = user_id_counter
         user_id_counter += 1
 
@@ -86,7 +98,7 @@ for arch in archetypes:
             num_pos = random.randint(15, 30)
             watched_pos = preferred_movies.sample(n=min(num_pos, len(preferred_movies)))
             for _, movie in watched_pos.iterrows():
-                base_rating = np.random.choice(rating_values, p=rating_probs)
+                base_rating = float(np.random.choice(rating_values, p=rating_probs))
                 final_rating = min(5.0, max(3.5, base_rating + (1.5 - rating_std)))
                 final_rating = round(final_rating * 2) / 2
 
@@ -103,7 +115,7 @@ for arch in archetypes:
             watched_neg = movies.sample(n=num_neg)
             for _, movie in watched_neg.iterrows():
                 if movie["movieId"] not in watched_pos["movieId"].values:
-                    base_rating = np.random.choice(rating_values, p=rating_probs)
+                    base_rating = float(np.random.choice(rating_values, p=rating_probs))
                     final_rating = min(3.0, max(0.5, base_rating - rating_std))
                     final_rating = round(final_rating * 2) / 2
 

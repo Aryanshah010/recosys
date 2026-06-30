@@ -59,7 +59,7 @@ async def login(
     user_id: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    user_id = str(user_id)
+    user_id = user_id
 
     user = db.query(User).filter(User.username == user_id).first()
 
@@ -127,8 +127,14 @@ async def register(
             status_code=303,
         )
 
-    preferred_languages = "|".join(languages) if languages else "EN"
-    preferred_genres = "|".join(genres) if genres else "Action|Drama"
+    preferred_languages = (
+        "|".join([x for x in languages if isinstance(x, str)]) if languages else "EN"
+    )
+    preferred_genres = (
+        "|".join([x for x in genres if isinstance(x, str)])
+        if genres
+        else "Action|Drama"
+    )
 
     user = User(
         username=username,

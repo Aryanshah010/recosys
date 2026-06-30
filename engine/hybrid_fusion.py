@@ -161,7 +161,7 @@ class HybridFusionEngine:
                 idx_val = self.cbf_indices.get(m)
                 if isinstance(idx_val, pd.Series):
                     safe_idxs.append(int(idx_val.iloc[0]))
-                else:
+                elif idx_val is not None:
                     safe_idxs.append(int(idx_val))
 
             unique_idxs = np.unique(safe_idxs)
