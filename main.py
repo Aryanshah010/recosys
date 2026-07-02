@@ -3,8 +3,8 @@ Single entry point that executes the full sequential pipeline:
 1. Data Cleaning & ETL (MovieLens + TMDb fusion)
 2. CBF Matrix Generation (TF-IDF + Cosine Similarity)
 3. Synthetic Cohort Generation (Nepali IT Male Students)
-4. Collaborative Filtering Training (SVD on combined data)
-5. Master Evaluation (4-model comparison + bias metrics)
+4. Collaborative Filtering Training (SVD on MovieLens real ratings only)
+5. Master Evaluation (synthetic support/holdout + bias metrics)
 """
 
 import subprocess
@@ -38,12 +38,12 @@ PIPELINE_STEPS = [
     ),
     (
         ENGINE_DIR / "collaborative_filter.py",
-        "Step 4/5: Training SVD Collaborative Filtering Model",
+        "Step 4/5: Training SVD CF Model (MovieLens real ratings only)",
         ["svd_model.pkl"]
     ),
     (
         EVALUATION_DIR / "evaluation_metrics.py",
-        "Step 5/5: Running Master Evaluation (4-Model Comparison)",
+        "Step 5/5: Running Master Evaluation (Synthetic Support/Holdout)",
         ["thesis_evaluation_metrics.csv"]
     ),
 ]
@@ -154,6 +154,7 @@ def main():
     print(f"  Total time:       {total_elapsed:.1f}s ({total_elapsed/60:.1f} min)")
     print(f"  Results saved to: {RESULTS_DIR / 'thesis_evaluation_metrics.csv'}")
     print("\n Open the results CSV to extract tables for Chapter 4.")
+    print("  SVD was trained on MovieLens only; synthetic users were evaluation-only.")
     print("  Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")
     print()
 

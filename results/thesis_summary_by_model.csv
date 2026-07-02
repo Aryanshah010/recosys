@@ -1,0 +1,5 @@
+Model,Precision@10_mean,Precision@10_std,Recall@10_mean,Recall@10_std,NDCG@10_mean,NDCG@10_std,Filter_Bubble_Score_mean,Filter_Bubble_Score_std,Language_Diversity_mean,Genre_Diversity_mean,Novelty@10_mean,Novelty@10_std
+CBF,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,2.5867,0.0,0.0
+CF,0.0013,0.0115,0.0022,0.0192,0.0014,0.0122,0.9013,0.0115,1.9867,6.7933,0.0987,0.0115
+Localized_Hybrid,0.0033,0.018,0.0062,0.0364,0.0061,0.036,1.0,0.0,1.0,2.9267,0.0,0.0
+NonLocal_Hybrid,0.0,0.0,0.0,0.0,0.0,0.0,0.9973,0.023,1.0267,3.26,0.0027,0.023

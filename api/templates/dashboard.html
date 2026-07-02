@@ -62,6 +62,16 @@
       <div class="flex items-center gap-4">
         <span class="text-slate-400 text-sm">👤 {{ user.username }}</span>
         <a
+          href="/comparison"
+          class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-3 py-1 transition"
+          >Compare</a
+        >
+        <a
+          href="/architecture"
+          class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-3 py-1 transition"
+          >Architecture</a
+        >
+        <a
           href="/admin"
           class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-3 py-1 transition"
           >⚙ Admin</a
@@ -75,6 +85,14 @@
     </nav>
 
     <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+      {% if artifact_error %}
+      <div
+        class="bg-red-950/50 border border-red-800 rounded-xl p-4 text-red-200 text-sm"
+      >
+        {{ artifact_error }}
+      </div>
+      {% endif %}
+
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div
           class="sm:col-span-1 rounded-2xl p-5 flex flex-col justify-center
@@ -173,6 +191,11 @@
         <span class="text-slate-600">|</span>
         <a href="/admin" class="text-red-400 hover:text-red-300 underline"
           >View evaluation results →</a
+        >
+        <span class="text-slate-600">|</span>
+        <span
+          ><strong class="text-slate-300">Method:</strong> real-only SVD;
+          synthetic users reserved for support/holdout evaluation.</span
         >
       </div>
 

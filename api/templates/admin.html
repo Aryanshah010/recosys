@@ -41,11 +41,23 @@
           >Admin</span
         >
       </div>
-      <a
-        href="/"
-        class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-3 py-1 transition"
-        >← Back to Login</a
-      >
+      <div class="flex items-center gap-3">
+        <a
+          href="/comparison"
+          class="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-3 py-1 transition"
+          >Compare</a
+        >
+        <a
+          href="/architecture"
+          class="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-3 py-1 transition"
+          >Architecture</a
+        >
+        <a
+          href="/"
+          class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-3 py-1 transition"
+          >← Back to Login</a
+        >
+      </div>
     </nav>
 
     <main class="max-w-7xl mx-auto px-4 py-8 space-y-10">
@@ -58,6 +70,14 @@
           Students &mdash; Aryan Shah
         </p>
       </div>
+
+      {% if artifact_error %}
+      <div
+        class="bg-red-950/50 border border-red-800 rounded-xl p-4 text-red-200 text-sm"
+      >
+        {{ artifact_error }}
+      </div>
+      {% endif %}
 
       <section>
         <p class="section-title">Live Usage Stats (SQLite)</p>
@@ -89,8 +109,8 @@
         </p>
         <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <p class="text-xs text-slate-400 mb-4">
-            Evaluated on 200-user synthetic Nepali IT student cohort (80/20
-            train/test split).
+            SVD is trained on real MovieLens ratings only. The synthetic Nepali
+            IT student cohort is reserved for support/holdout evaluation.
             <strong class="text-white">Localized_Hybrid</strong> incorporates
             language + genre preference weighting.
           </p>
@@ -594,7 +614,7 @@
           '<p>• <strong class="text-white">Precision@10</strong> = fraction of Top-10 recs that were actually rated ≥4.0 by the user in the test set.</p>' +
           '<p>• <strong class="text-white">NDCG@10</strong> = ranking quality (higher-ranked correct items score more).</p>' +
           '<p>• <strong class="text-white">Filter Bubble</strong> = fraction of Top-10 matching the user\'s explicit preferences (high = echo chamber risk).</p>' +
-          '<p class="mt-2 text-slate-400">Even if Precision is low or similar across models, the <em>diversity and filter bubble differences</em> between Localised_Hybrid and CF directly answer RQ2 and are publishable observations.</p>';
+          '<p class="mt-2 text-slate-400">Because SVD is trained only on real MovieLens ratings, differences between Localised_Hybrid and CF are not caused by synthetic-user leakage.</p>';
       }
     </script>
   </body>

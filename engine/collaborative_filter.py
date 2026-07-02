@@ -9,7 +9,7 @@ MODEL_PATH = os.path.join(PROCESSED_DIR, "svd_model.pkl")
 
 
 def train_svd_model():
-    print(f"Loading cleaned ratings from: {RATINGS_PATH}")
+    print(f"Loading real MovieLens ratings only from: {RATINGS_PATH}")
 
     if not os.path.exists(RATINGS_PATH):
         raise FileNotFoundError(
@@ -27,7 +27,7 @@ def train_svd_model():
     print("Building the training matrix...")
     trainset = data.build_full_trainset()
 
-    print("Training the SVD Matrix Factorization model (This may take a moment)...")
+    print("Training SVD on real ratings only; no synthetic cohort rows are used.")
     algo = SVD(n_factors=150, n_epochs=30, lr_all=0.003, reg_all=0.01, random_state=42)
 
     algo.fit(trainset)

@@ -34,6 +34,14 @@
         </p>
       </div>
 
+      {% if artifact_error %}
+      <div
+        class="bg-red-950/50 border border-red-800 rounded-xl p-4 text-red-200 text-sm mb-6"
+      >
+        {{ artifact_error }}
+      </div>
+      {% endif %}
+
       <form
         action="/register"
         method="post"

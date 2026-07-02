@@ -20,6 +20,7 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = BASE_DIR / "api" / "templates"
 SYNTH_PROFILES_PATH = BASE_DIR / "data" / "processed" / "synthetic_user_profiles.csv"
+SYNTH_INTERACTIONS_PATH = BASE_DIR / "data" / "processed" / "synthetic_interactions.csv"
 EVAL_RESULTS_PATH = BASE_DIR / "results" / "thesis_evaluation_metrics.csv"
 
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -29,6 +30,7 @@ rec_engine = HybridFusionEngine()
 print("Hybrid Fusion Engine Ready.")
 
 synth_df = None
+synth_interactions_df = None
 sample_users = []
 
 if SYNTH_PROFILES_PATH.exists():
@@ -44,13 +46,56 @@ if SYNTH_PROFILES_PATH.exists():
 else:
     print(f"Synthetic profile file not found: {SYNTH_PROFILES_PATH}")
 
+if SYNTH_INTERACTIONS_PATH.exists():
+    print("Loading synthetic evaluation interactions...")
+    synth_interactions_df = pd.read_csv(SYNTH_INTERACTIONS_PATH)
+    if "userId" in synth_interactions_df.columns:
+        synth_interactions_df["userId"] = synth_interactions_df["userId"].astype(str)
+    print(f"Loaded {len(synth_interactions_df)} synthetic interactions")
+else:
+    print(f"Synthetic interaction file not found: {SYNTH_INTERACTIONS_PATH}")
+
+
+def artifact_message():
+    if rec_engine.is_ready:
+        return None
+    missing = ", ".join(rec_engine.missing_artifacts) or "processed artifacts"
+    return f"Run the master pipeline first: uv run python main.py. Missing: {missing}"
+
+
+def get_synthetic_profile(user_id):
+    if synth_df is None:
+        return None
+    profile = synth_df[synth_df["user_id"].astype(str) == str(user_id)]
+    if profile.empty:
+        return None
+    return profile.iloc[0]
+
+
+def get_synthetic_support_history(user_id):
+    if synth_interactions_df is None:
+        return []
+
+    rows = synth_interactions_df[synth_interactions_df["userId"].astype(str) == str(user_id)]
+    if rows.empty:
+        return []
+
+    rows = rows.sort_values(["rating", "movieId"], ascending=[False, True])
+    positives = rows[rows["rating"] >= 4.0]
+    if len(positives) >= 2:
+        holdout_count = max(1, int(round(len(positives) * 0.3)))
+        holdout_indexes = set(positives.tail(holdout_count).index)
+        rows = rows[~rows.index.isin(holdout_indexes)]
+
+    return rows["movieId"].astype(int).tolist()
+
 
 @router.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"users": sample_users},
+        context={"users": sample_users, "artifact_error": artifact_message()},
     )
 
 
@@ -102,7 +147,7 @@ async def register_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="register.html",
-        context={},
+        context={"artifact_error": artifact_message()},
     )
 
 
@@ -195,6 +240,7 @@ async def dashboard(
             "user": user,
             "recommendations": recs,
             "history_count": len(history),
+            "artifact_error": artifact_message(),
         },
     )
 
@@ -245,7 +291,38 @@ async def admin_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="admin.html",
-        context={},
+        context={"artifact_error": artifact_message()},
+    )
+
+
+@router.get("/results", response_class=HTMLResponse)
+async def results_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={"artifact_error": artifact_message()},
+    )
+
+
+@router.get("/comparison", response_class=HTMLResponse)
+async def comparison_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="comparison.html",
+        context={
+            "users": sample_users,
+            "artifact_error": artifact_message(),
+            "has_synthetic_data": synth_df is not None,
+        },
+    )
+
+
+@router.get("/architecture", response_class=HTMLResponse)
+async def architecture_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="architecture.html",
+        context={"artifact_error": artifact_message()},
     )
 
 
@@ -297,5 +374,42 @@ async def admin_metrics():
         {
             "raw": raw_rows,
             "summary": raw_rows,
+        }
+    )
+
+
+@router.post("/api/comparison/all-models", response_class=JSONResponse)
+async def comparison_all_models(user_id: str = Form(...)):
+    if not rec_engine.is_ready:
+        raise HTTPException(status_code=503, detail=artifact_message())
+
+    profile = get_synthetic_profile(user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Synthetic user not found")
+
+    user_profile = {
+        "preferred_languages": str(profile.get("preferred_languages", "")),
+        "preferred_genres": str(profile.get("preferred_genres", "")),
+    }
+    support_history = get_synthetic_support_history(user_id)
+
+    try:
+        models = rec_engine.compare_models(
+            user_id=user_id,
+            user_profile=user_profile,
+            user_history=support_history,
+            k=10,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return JSONResponse(
+        {
+            "status": "success",
+            "user_id": user_id,
+            "archetype": str(profile.get("cohort_group", "Unknown")),
+            "preferences": user_profile,
+            "support_history_count": len(support_history),
+            "models": models,
         }
     )

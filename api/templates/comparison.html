@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RecoSys | Model Comparison</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        background: #0f172a;
+      }
+    </style>
+  </head>
+
+  <body class="min-h-screen text-white">
+    <nav
+      class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50"
+    >
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-red-500 font-extrabold text-xl tracking-tight"
+          >RecoSys</a
+        >
+        <span
+          class="text-slate-500 text-xs border border-slate-700 rounded px-2 py-0.5"
+          >Model Comparison</span
+        >
+      </div>
+      <div class="flex items-center gap-3">
+        <a
+          href="/architecture"
+          class="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-3 py-1 transition"
+          >Architecture</a
+        >
+        <a
+          href="/admin"
+          class="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-3 py-1 transition"
+          >Results</a
+        >
+        <a
+          href="/"
+          class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-3 py-1 transition"
+          >Back</a
+        >
+      </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+      <header>
+        <h1 class="text-2xl font-bold text-white">
+          Four-Model Recommendation Comparison
+        </h1>
+        <p class="text-slate-400 text-sm mt-1">
+          CF uses the real-only SVD model. Synthetic interactions are used only
+          as evaluation support history for this demo.
+        </p>
+      </header>
+
+      {% if artifact_error %}
+      <div class="bg-red-950/50 border border-red-800 rounded-xl p-4 text-red-200 text-sm">
+        {{ artifact_error }}
+      </div>
+      {% endif %}
+
+      <section class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+        <form id="comparison-form" class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+          <div>
+            <label
+              for="user-id"
+              class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide"
+              >Synthetic Profile</label
+            >
+            <select
+              id="user-id"
+              name="user_id"
+              class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500 transition"
+              {% if not users or artifact_error %}disabled{% endif %}
+            >
+              {% for u in users %}
+              <option value="{{ u.user_id }}">
+                {{ u.user_id }} | {{ u.cohort_group }} | {{ u.preferred_languages }} |
+                {{ u.preferred_genres[:42] }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <button
+            type="submit"
+            class="self-end bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:text-slate-400 text-white font-bold px-5 py-3 rounded-xl transition"
+            {% if not users or artifact_error %}disabled{% endif %}
+          >
+            Compare Models
+          </button>
+        </form>
+      </section>
+
+      <section id="profile-panel" class="hidden bg-slate-800/70 border border-slate-700 rounded-xl p-5">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p class="text-slate-500 text-xs uppercase tracking-wide">User</p>
+            <p id="profile-user" class="text-white font-semibold mt-1"></p>
+          </div>
+          <div>
+            <p class="text-slate-500 text-xs uppercase tracking-wide">Archetype</p>
+            <p id="profile-archetype" class="text-white font-semibold mt-1"></p>
+          </div>
+          <div>
+            <p class="text-slate-500 text-xs uppercase tracking-wide">Preferences</p>
+            <p id="profile-prefs" class="text-slate-300 mt-1"></p>
+          </div>
+          <div>
+            <p class="text-slate-500 text-xs uppercase tracking-wide">Support History</p>
+            <p id="profile-history" class="text-slate-300 mt-1"></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="status" class="hidden text-sm text-slate-400"></section>
+
+      <section
+        id="models-grid"
+        class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4"
+      ></section>
+    </main>
+
+    <script>
+      const MODEL_LABELS = {
+        CF: "CF: Real-only SVD",
+        CBF: "CBF: Content Similarity",
+        NonLocal_Hybrid: "Non-local Hybrid",
+        Localized_Hybrid: "Localized Hybrid",
+      };
+
+      const MODEL_ACCENTS = {
+        CF: "border-blue-700",
+        CBF: "border-emerald-700",
+        NonLocal_Hybrid: "border-orange-700",
+        Localized_Hybrid: "border-red-700",
+      };
+
+      const form = document.getElementById("comparison-form");
+      const statusEl = document.getElementById("status");
+      const grid = document.getElementById("models-grid");
+      const profilePanel = document.getElementById("profile-panel");
+
+      function setStatus(message, isError) {
+        statusEl.textContent = message;
+        statusEl.className =
+          "text-sm " + (isError ? "text-red-300" : "text-slate-400");
+        statusEl.classList.remove("hidden");
+      }
+
+      function renderModel(modelName, recs) {
+        const section = document.createElement("article");
+        section.className =
+          "bg-slate-800 border " +
+          (MODEL_ACCENTS[modelName] || "border-slate-700") +
+          " rounded-xl overflow-hidden";
+
+        const rows = recs
+          .map(function (rec, idx) {
+            return (
+              '<li class="border-t border-slate-700/60 p-3">' +
+              '<div class="flex justify-between gap-3">' +
+              '<p class="text-sm font-semibold text-white leading-snug">' +
+              (idx + 1) +
+              ". " +
+              rec.title +
+              "</p>" +
+              '<span class="font-mono text-xs text-slate-300">' +
+              Number(rec.score || 0).toFixed(4) +
+              "</span>" +
+              "</div>" +
+              '<p class="text-xs text-slate-500 mt-1">' +
+              (rec.language || "N/A") +
+              " | " +
+              (rec.genres || "N/A") +
+              "</p>" +
+              '<p class="text-xs text-slate-400 mt-2">' +
+              (rec.explanation || "") +
+              "</p>" +
+              "</li>"
+            );
+          })
+          .join("");
+
+        section.innerHTML =
+          '<div class="p-4">' +
+          '<h2 class="text-sm font-bold text-white">' +
+          (MODEL_LABELS[modelName] || modelName) +
+          "</h2>" +
+          '<p class="text-xs text-slate-500 mt-1">Top-10 list for the same user</p>' +
+          "</div>" +
+          '<ol class="text-sm">' +
+          rows +
+          "</ol>";
+
+        return section;
+      }
+
+      if (form) {
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          grid.innerHTML = "";
+          profilePanel.classList.add("hidden");
+          setStatus("Loading model comparison...", false);
+
+          const formData = new FormData(form);
+          fetch("/api/comparison/all-models", {
+            method: "POST",
+            body: formData,
+          })
+            .then(function (response) {
+              return response.json().then(function (data) {
+                if (!response.ok) throw new Error(data.detail || "Request failed");
+                return data;
+              });
+            })
+            .then(function (data) {
+              statusEl.classList.add("hidden");
+
+              document.getElementById("profile-user").textContent = data.user_id;
+              document.getElementById("profile-archetype").textContent =
+                data.archetype;
+              document.getElementById("profile-prefs").textContent =
+                data.preferences.preferred_languages +
+                " | " +
+                data.preferences.preferred_genres;
+              document.getElementById("profile-history").textContent =
+                data.support_history_count + " movies";
+              profilePanel.classList.remove("hidden");
+
+              ["CF", "CBF", "NonLocal_Hybrid", "Localized_Hybrid"].forEach(
+                function (modelName) {
+                  grid.appendChild(renderModel(modelName, data.models[modelName] || []));
+                },
+              );
+            })
+            .catch(function (error) {
+              setStatus(error.message, true);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
