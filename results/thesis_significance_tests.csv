@@ -1,7 +1,0 @@
-Model_A,Model_B,Metric,N,Mean_A,Mean_B,T_Statistic,P_Value,Cohens_D
-CF,CBF,NDCG@10,150,0.0014,0.0,1.4153,0.159077,0.1156
-CF,NonLocal_Hybrid,NDCG@10,150,0.0014,0.0,1.4153,0.159077,0.1156
-CF,Localized_Hybrid,NDCG@10,150,0.0014,0.0061,-1.7212,0.087282,-0.1405
-CBF,NonLocal_Hybrid,NDCG@10,150,0.0,0.0,,,
-CBF,Localized_Hybrid,NDCG@10,150,0.0,0.0061,-2.0855,0.038726,-0.1703
-NonLocal_Hybrid,Localized_Hybrid,NDCG@10,150,0.0,0.0061,-2.0855,0.038726,-0.1703

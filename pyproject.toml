@@ -25,4 +25,4 @@ dev = [
 ]
 
 [tool.pyright]
-extraPaths = ["."]
+extraPaths = [".", "./src"]
