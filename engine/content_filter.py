@@ -1,152 +1,146 @@
-import pandas as pd
+from __future__ import annotations
+
+import logging
+import os
+
+from typing import cast
+
+import joblib
 import numpy as np
-import pickle
-import re
+from scipy.sparse import csr_matrix
+from sklearn.metrics.pairwise import linear_kernel
 
-GENRE_MAPPING = {
-    "Sci-Fi": "ScienceFiction",
-    "Science Fiction": "ScienceFiction",
-    "Children's": "Family",
-    "Childrens": "Family",
-    "Film-Noir": "Crime",
-    "Anime": "Animation",
-    "Bollywood": "Drama",
-    "Tollywood": "Action",
-}
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-LANGUAGE_MAPPING = {
-    "HINDI": "HI",
-    "ENGLISH": "EN",
-    "NEPALI": "NE",
-    "JAPANESE": "JA",
-    "KOREAN": "KO",
-    "FRENCH": "FR",
-    "SPANISH": "ES",
-    "GERMAN": "DE",
-    "ITALIAN": "IT",
-    "CHINESE": "ZH",
-    "RUSSIAN": "RU",
-    "ARABIC": "AR",
-    "BENGALI": "BN",
-    "TELUGU": "TE",
-    "TAMIL": "TA",
-    "KANNADA": "KN",
-    "MALAYALAM": "ML",
-    "MARATHI": "MR",
-    "PUNJABI": "PA",
-    "URDU": "UR",
-}
+PROCESSED_DIR = "data/processed"
+CBF_MATRIX_PATH = os.path.join(PROCESSED_DIR, "cbf_matrix.pkl")
+CBF_METADATA_PATH = os.path.join(PROCESSED_DIR, "cbf_metadata.pkl")
+
+REQUIRED_METADATA_KEYS = [
+    "movie_ids",
+    "movie_index",
+    "titles",
+    "clean_genres",
+    "language",
+    "n_movies",
+]
 
 
-def normalize_user_preferences(user_profile):
-    raw_langs = str(user_profile.get("preferred_languages", "")).split("|")
-    pref_langs = set()
-    for l in raw_langs:
-        l_clean = l.strip().upper()
-        pref_langs.add(LANGUAGE_MAPPING.get(l_clean, l_clean))
-
-    raw_genres = re.split(r"\||,", str(user_profile.get("preferred_genres", "")))
-    pref_genres = set()
-    for g in raw_genres:
-        g_clean = g.strip()
-        if g_clean in GENRE_MAPPING:
-            pref_genres.add(GENRE_MAPPING[g_clean])
-        else:
-            pref_genres.add(g_clean.replace("-", "").replace(" ", ""))
-
-    return pref_langs, pref_genres
+def check_file_exists(path: str) -> None:
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Required input file not found: {path}. Run build_cbf_matrix.py first."
+        )
 
 
-class CBFEngine:
+def load_cbf_artifacts(
+    matrix_path: str = CBF_MATRIX_PATH,
+    meta_path: str = CBF_METADATA_PATH,
+) -> tuple[csr_matrix, dict[str, object]]:
+
+    check_file_exists(matrix_path)
+    check_file_exists(meta_path)
+
+    matrix = joblib.load(matrix_path)
+    metadata = joblib.load(meta_path)
+
+    missing = [k for k in REQUIRED_METADATA_KEYS if k not in metadata]
+    if missing:
+        raise ValueError(f"cbf_metadata.pkl is missing required keys: {missing}")
+
+    if matrix.shape[0] != metadata["n_movies"]:
+        raise ValueError(
+            f"TF-IDF matrix rows ({matrix.shape[0]}) do not match "
+            f"metadata n_movies ({metadata['n_movies']})."
+        )
+
+    return matrix, metadata
+
+
+class ContentBasedFilter:
     def __init__(
         self,
-        matrix_path="data/processed/cbf_matrix.pkl",
-        meta_path="data/processed/cbf_metadata.pkl",
-    ):
-        with open(matrix_path, "rb") as f:
-            self.cosine_sim = pickle.load(f)
-        with open(meta_path, "rb") as f:
-            self.df = pickle.load(f)
+        matrix_path: str = CBF_MATRIX_PATH,
+        meta_path: str = CBF_METADATA_PATH,
+    ) -> None:
+        self.matrix, self.metadata = load_cbf_artifacts(matrix_path, meta_path)
+        self.movie_index = cast(dict[int, int], self.metadata["movie_index"])
+        self.movie_ids = cast(np.ndarray, self.metadata["movie_ids"])
+        self.titles = cast(list[str], self.metadata["titles"])
+        self.clean_genres = cast(list[str], self.metadata["clean_genres"])
+        self.language = cast(list[str], self.metadata["language"])
+        self.n_movies = cast(int, self.metadata["n_movies"])
+        logger.info("Loaded CBF matrix: %d movies.", self.n_movies)
 
-        self.indices = pd.Series(
-            self.df.index, index=self.df["movieId"]
-        ).drop_duplicates()
+    def _resolve_indices(self, movie_ids: list[int]) -> list[int]:
+        idxs, missing = [], []
+        for m in movie_ids:
+            idx = self.movie_index.get(m)
+            if idx is None:
+                missing.append(m)
+            else:
+                idxs.append(idx)
+        if missing:
+            logger.warning(
+                "%d/%d movieId(s) not in CBF catalog, skipped: %s",
+                len(missing),
+                len(movie_ids),
+                missing[:10],
+            )
+        return idxs
 
-        self.df["popularity_score"] = (
-            self.df["vote_count"] / self.df["vote_count"].max()
-        )
+    def get_content_scores(self, liked_movie_ids: list[int]) -> np.ndarray:
 
-    def _calculate_preference_score(self, movie_row, user_profile):
-        score = 0.0
-        pref_genres = set(user_profile.get("preferred_genres", []))
-        pref_langs = set(
-            [l.upper() for l in user_profile.get("preferred_languages", [])]
-        )
+        idxs = self._resolve_indices(liked_movie_ids)
+        if not idxs:
+            return np.zeros(self.n_movies, dtype=np.float32)
 
-        if movie_row["language"] in pref_langs:
-            score += 0.6
+        sims = linear_kernel(self.matrix[idxs], self.matrix)
+        return sims.mean(axis=0).astype(np.float32)
 
-        movie_genres = set(str(movie_row["clean_genres"]).split()) if pd.notna(movie_row["clean_genres"]) else set()
-        if not movie_genres.isdisjoint(pref_genres):
-            score += 0.4
+    def recommend(self, liked_movie_ids: list[int], k: int = 10) -> list[dict]:
+        scores = self.get_content_scores(liked_movie_ids)
+        exclude = set(liked_movie_ids)
 
-        return score
-
-    def recommend_for_user(
-        self, user_profile, liked_movie_ids, k=10, apply_debiasing=False
-    ):
-        valid_liked_ids = [m for m in liked_movie_ids if m in self.indices.index]
-
-        has_cf_signal = len(valid_liked_ids) > 0
-
-        if has_cf_signal:
-            idxs = [self.indices[m] for m in valid_liked_ids]
-            content_scores = np.mean(self.cosine_sim[idxs], axis=0)
-        else:
-            content_scores = np.zeros(len(self.df))
-
-        pref_scores = np.array(
-            [
-                self._calculate_preference_score(row, user_profile)
-                for _, row in self.df.iterrows()
-            ]
-        )
-
-        if has_cf_signal:
-            w_content, w_pref = 0.6, 0.4
-        else:
-            w_content, w_pref = 0.6, 0.4
-
-        final_scores = (w_content * content_scores) + (w_pref * pref_scores)
-
-        if apply_debiasing:
-            popularity_penalty = np.where(self.df["popularity_score"] > 0.9, 0.8, 1.0)
-            final_scores = final_scores * popularity_penalty
-
-        results = self.df[["movieId", "title", "clean_genres", "language"]].copy()
-        results["final_score"] = final_scores
-
-        results = results[~results["movieId"].isin(valid_liked_ids)]
-
-        results = results.sort_values(by="final_score", ascending=False).head(k)
+        ranked_idx = np.argsort(-scores)
+        results: list[dict] = []
+        for idx in ranked_idx:
+            movie_id = int(self.movie_ids[idx])
+            if movie_id in exclude:
+                continue
+            results.append(
+                {
+                    "movieId": movie_id,
+                    "title": self.titles[idx],
+                    "clean_genres": self.clean_genres[idx],
+                    "language": self.language[idx],
+                    "score": float(scores[idx]),
+                }
+            )
+            if len(results) >= k:
+                break
         return results
 
 
+def main() -> None:
+    engine = ContentBasedFilter()
+
+    demo_liked = [
+        1,
+        2571,
+    ]  # Toy Story
+    recs = engine.recommend(demo_liked, k=10)
+
+    print(f"\nContent-based recommendations for liked={demo_liked}:")
+    for r in recs:
+        print(
+            f"  {r['movieId']:>7}  {r['title'][:40]:<40}  {r['clean_genres']:<25}  {r['language']:<10}  {r['score']:.4f}"
+        )
+
+
 if __name__ == "__main__":
-    engine = CBFEngine()
-
-    synthetic_user = {
-        "user_id": "synth_nepali_it_01",
-        "preferred_genres": ["ScienceFiction", "Action", "Animation", "Thriller"],
-        "preferred_languages": ["en", "hi", "ja"],
-    }
-
-    print("\nCOLD START (Preference Driven)")
-    cold_recs = engine.recommend_for_user(synthetic_user, liked_movie_ids=[], k=5)
-    print(cold_recs[["title", "language", "clean_genres"]])
-
-    print("\nRETURNING USER (Content + Preference)")
-    returning_recs = engine.recommend_for_user(
-        synthetic_user, liked_movie_ids=[2571], k=5, apply_debiasing=True
-    )
-    print(returning_recs[["title", "language", "clean_genres"]])
+    main()
