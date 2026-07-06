@@ -7,7 +7,14 @@ from typing import TypedDict
 import numpy as np
 import pandas as pd
 
-from mappings import CANONICAL_GENRES, CANONICAL_LANGUAGE_MAP
+from .mappings import CANONICAL_GENRES
+from .localization_config import (
+    GENRE_LOCALIZATION_WEIGHT,
+    LANGUAGE_LOCALIZATION_WEIGHT,
+    build_genre_weight_vector,
+    build_genre_onehot_from_list,
+    compute_language_preference_scores,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +29,7 @@ SYNTHETIC_RATINGS_PATH = os.path.join(PROCESSED_DIR, "synthetic_ratings.csv")
 
 N_USERS = 400
 USER_ID_OFFSET = 900_000
-AGE_RANGE = (19, 26)  
+AGE_RANGE = (19, 26)
 GENDER = "Male"
 
 EDUCATION_WEIGHTS: dict[str, float] = {
@@ -48,6 +55,7 @@ class Archetype(TypedDict):
     core_genres: list[str]
     optional_genres: list[str]
     n_optional_genres: tuple[int, int]
+
 
 ARCHETYPES: list[Archetype] = [
     {
@@ -102,36 +110,6 @@ ARCHETYPES: list[Archetype] = [
     },
 ]
 
-GENRE_LOCALIZATION_WEIGHT: dict[str, float] = {
-    "Sci-Fi": 1.00,
-    "Action": 0.95,
-    "Thriller": 0.90,
-    "Adventure": 0.85,
-    "Fantasy": 0.80,
-    "Crime": 0.75,
-    "Animation": 0.70,
-    "Comedy": 0.65,
-    "Drama": 0.60,
-    "Mystery": 0.55,
-    "Romance": 0.40,
-    "Horror": 0.40,
-    "Family": 0.35,
-    "History": 0.30,
-    "War": 0.30,
-    "Documentary": 0.20,
-    "Music": 0.20,
-    "Western": 0.15,
-    "TV": 0.15,
-}
-
-LANGUAGE_LOCALIZATION_WEIGHT: dict[str, float] = {
-    "English": 1.00,
-    "Hindi": 0.90,
-    "Japanese": 0.85,
-    "Korean": 0.80,
-    "Nepali": 0.75,
-}
-
 GENRE_SCORE_COEF = 0.5
 LANGUAGE_SCORE_COEF = 0.3
 POPULARITY_SCORE_COEF = 0.1
@@ -140,21 +118,9 @@ GUMBEL_TEMPERATURE = 0.3
 REQUIRED_MOVIE_COLUMNS = ["movieId", "clean_genres", "language", "vote_count"]
 
 
-def _assert_weight_tables_match_canonical() -> None:
+def _assert_archetypes_valid() -> None:
     genre_keys = set(GENRE_LOCALIZATION_WEIGHT)
-    if genre_keys != set(CANONICAL_GENRES):
-        raise ValueError(
-            f"GENRE_LOCALIZATION_WEIGHT keys do not match CANONICAL_GENRES. "
-            f"Missing: {set(CANONICAL_GENRES) - genre_keys}, "
-            f"Extra: {genre_keys - set(CANONICAL_GENRES)}"
-        )
-    canonical_langs = set(CANONICAL_LANGUAGE_MAP.values())
     lang_keys = set(LANGUAGE_LOCALIZATION_WEIGHT)
-    if not lang_keys.issubset(canonical_langs):
-        raise ValueError(
-            f"LANGUAGE_LOCALIZATION_WEIGHT has keys not in canonical "
-            f"language vocabulary: {lang_keys - canonical_langs}"
-        )
 
     prob_sum = sum(a["prob"] for a in ARCHETYPES)
     if abs(prob_sum - 1.0) > 1e-6:
@@ -172,7 +138,7 @@ def _assert_weight_tables_match_canonical() -> None:
             )
 
 
-_assert_weight_tables_match_canonical()
+_assert_archetypes_valid()
 
 
 def check_file_exists(path: str) -> None:
@@ -238,46 +204,11 @@ def generate_user_profiles(n_users: int, rng: np.random.Generator) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
-def build_genre_onehot(movies_df: pd.DataFrame) -> np.ndarray:
-    genre_to_col = {g: i for i, g in enumerate(CANONICAL_GENRES)}
-    onehot = np.zeros((len(movies_df), len(CANONICAL_GENRES)), dtype=np.float32)
-    for row_idx, genre_str in enumerate(movies_df["clean_genres"].fillna("")):
-        for g in str(genre_str).split("|"):
-            col = genre_to_col.get(g)
-            if col is not None:
-                onehot[row_idx, col] = 1.0
-    return onehot
-
-
 def build_popularity_norm(movies_df: pd.DataFrame) -> np.ndarray:
     vote_count = pd.to_numeric(movies_df["vote_count"], errors="coerce").fillna(0.0)
     log_vc = np.log1p(vote_count.to_numpy(dtype=np.float64))
     max_log_vc = log_vc.max() if log_vc.max() > 0 else 1.0
     return (log_vc / max_log_vc).astype(np.float32)
-
-
-def build_genre_weight_vector(preferred_genres: list[str]) -> np.ndarray:
-    return np.array(
-        [
-            GENRE_LOCALIZATION_WEIGHT[g] if g in preferred_genres else 0.0
-            for g in CANONICAL_GENRES
-        ],
-        dtype=np.float32,
-    )
-
-
-def build_language_score(
-    movie_language: np.ndarray, preferred_langs: set[str]
-) -> np.ndarray:
-    return np.array(
-        [
-            LANGUAGE_LOCALIZATION_WEIGHT.get(lang, 0.0)
-            if lang in preferred_langs
-            else 0.0
-            for lang in movie_language
-        ],
-        dtype=np.float32,
-    )
 
 
 def generate_ratings(
@@ -288,7 +219,9 @@ def generate_ratings(
 
     movie_ids = movies_df["movieId"].to_numpy()
     movie_language = movies_df["language"].fillna("").to_numpy()
-    genre_onehot = build_genre_onehot(movies_df)
+    genre_onehot = build_genre_onehot_from_list(
+        movies_df["clean_genres"].fillna("").tolist()
+    )
     popularity_norm = build_popularity_norm(movies_df)
     n_movies = len(movies_df)
 
@@ -300,7 +233,7 @@ def generate_ratings(
         pref_langs = set(pref_langs_str.split("|")) if pref_langs_str else set()
 
         genre_vec = build_genre_weight_vector(pref_genres)
-        lang_score = build_language_score(movie_language, pref_langs)
+        lang_score = compute_language_preference_scores(movie_language, pref_langs)
 
         base_score = (
             GENRE_SCORE_COEF * (genre_onehot @ genre_vec)
