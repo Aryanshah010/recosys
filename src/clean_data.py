@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from mappings import map_genre, map_language, UNKNOWN_GENRE_LABEL
+from .mappings import map_genre, map_language, UNKNOWN_GENRE_LABEL
 
 logging.basicConfig(
     level=logging.INFO,

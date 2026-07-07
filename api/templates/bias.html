@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Bias Analysis — RQ2{% endblock %}
+{% block content %}
+  <div class="eyebrow">RQ2 · Ethical and bias implications of demographic weighting</div>
+  <h1>Diversity &amp; filter-bubble effects</h1>
+  <p class="caption">Tests H2: localization may improve personalization but risks narrowing content diversity and reinforcing cultural consumption patterns.</p>
+
+  <h2 class="section-gap">Diversity by model</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        {% if diversity %}
+          {% for key in diversity[0].keys() %}<th>{{ key }}</th>{% endfor %}
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in diversity %}
+      <tr>
+        {% for v in row.values() %}<td class="num">{{ v }}</td>{% endfor %}
+      </tr>
+      {% else %}
+      <tr><td class="num">rq2_diversity_by_model.csv not found in results/</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="section-gap">Filter bubble score by archetype</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        {% if filter_bubble %}
+          {% for key in filter_bubble[0].keys() %}<th>{{ key }}</th>{% endfor %}
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in filter_bubble %}
+      <tr>
+        {% for v in row.values() %}<td class="num">{{ v }}</td>{% endfor %}
+      </tr>
+      {% else %}
+      <tr><td class="num">rq2_filter_bubble_by_archetype.csv not found in results/</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

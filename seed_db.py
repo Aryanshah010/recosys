@@ -1,6 +1,6 @@
 import pandas as pd
 from api.db import engine, SessionLocal, Base
-from api.models import Movie
+from api.models import Movie, SyntheticUser
 
 
 def init_db():
@@ -20,13 +20,10 @@ def seed_movies():
         return
 
     has_tmdb = df["tmdbId"].notna()
-    df = pd.concat(
-        [
-            df[has_tmdb].drop_duplicates(subset=["tmdbId"], keep="first"),
-            df[~has_tmdb],
-        ],
-        ignore_index=True,
-    )
+    df = pd.concat([
+        df[has_tmdb].drop_duplicates(subset=["tmdbId"], keep="first"),
+        df[~has_tmdb],
+    ], ignore_index=True)
 
     db = SessionLocal()
     try:
@@ -56,6 +53,45 @@ def seed_movies():
         db.close()
 
 
+def seed_synthetic_users():
+    print("Seeding synthetic_users from synthetic_users.csv...")
+    csv_path = "data/processed/synthetic_users.csv"
+
+    try:
+        df = pd.read_csv(csv_path)
+    except FileNotFoundError:
+        print("synthetic_users.csv not found. Run generate_synthetic_cohort.py first.")
+        return
+
+    db = SessionLocal()
+    try:
+        if db.query(SyntheticUser).count() > 0:
+            print("synthetic_users table already populated. Skipping seed.")
+            return
+
+        users_to_add = [
+            SyntheticUser(
+                id=int(row["userId"]),
+                age=int(row["age"]),
+                gender=str(row["gender"]),
+                education=str(row["education"]),
+                archetype=str(row["archetype"]),
+                preferred_genres=str(row["preferred_genres"]),
+                preferred_language=str(row["preferred_language"]),
+            )
+            for _, row in df.iterrows()
+        ]
+        db.bulk_save_objects(users_to_add)
+        db.commit()
+        print(f"Successfully seeded {len(users_to_add)} synthetic users into SQLite.")
+    except Exception as e:
+        print(f"Error seeding synthetic_users: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     init_db()
     seed_movies()
+    seed_synthetic_users()

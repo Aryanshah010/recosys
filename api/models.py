@@ -1,65 +1,41 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
-from .db import Base
+from __future__ import annotations
 
+from datetime import datetime, timezone
 
-class User(Base):
-    __tablename__ = "users"
+from sqlalchemy import Column, DateTime, Float, Integer, String
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    preferred_genres = Column(Text, nullable=True)
-    preferred_languages = Column(String(100), nullable=True, default="en")
-
-    interactions = relationship(
-        "Interaction", back_populates="user", cascade="all, delete-orphan"
-    )
+from api.db import Base
 
 
 class Movie(Base):
     __tablename__ = "movies"
-    id = Column(Integer, primary_key=True, index=True, autoincrement=False)
-    tmdb_id = Column(Integer, unique=True, nullable=True, index=True)
-    title = Column(String(255), nullable=False)
-    genres = Column(String(255), nullable=False)
-    release_year = Column(Integer, nullable=True)
-
-    poster_path = Column(String(255), nullable=True)
-    overview = Column(Text, nullable=True)
-    original_language = Column(String(10), nullable=True, default="en")
-    interactions = relationship(
-        "Interaction", back_populates="movie", cascade="all, delete-orphan"
-    )
-
-
-class Interaction(Base):
-    __tablename__ = "interactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    movie_id = Column(Integer, ForeignKey("movies.id"), nullable=False)
-
-    rating = Column(Float, nullable=False, default=5.0)
-
-    interaction_type = Column(String(20), nullable=False, default="like")
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    user = relationship("User", back_populates="interactions")
-    movie = relationship("Movie", back_populates="interactions")
+    tmdb_id = Column(Integer, nullable=True, unique=True, index=True)
+    title = Column(String, nullable=False)
+    genres = Column(String, nullable=False)
+    original_language = Column(String, nullable=False)
 
 
-class EvaluationMetric(Base):
-    __tablename__ = "evaluation_metrics"
+class SyntheticUser(Base):
+    __tablename__ = "synthetic_users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    model_name = Column(String(50), nullable=False)
-    k_value = Column(Integer, nullable=False, default=10)
-    precision_at_k = Column(Float, nullable=False)
-    recall_at_k = Column(Float, nullable=False)
-    ndcg = Column(Float, nullable=False)
-    rmse = Column(Float, nullable=True)
-    calculated_at = Column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)  # == synthetic userId
+    age = Column(Integer)
+    gender = Column(String)
+    education = Column(String)
+    archetype = Column(String, index=True)
+    preferred_genres = Column(String)
+    preferred_language = Column(String)
+
+
+class RecommendationLog(Base):
+    __tablename__ = "recommendation_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, index=True)
+    model_name = Column(String, index=True)
+    movie_id = Column(Integer)
+    rank = Column(Integer)
+    score = Column(Float)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

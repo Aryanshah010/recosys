@@ -1,378 +1,50 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RecoSys | Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      body {
-        background: #0f172a;
-      }
-      .btn-action {
-        transition: all 0.2s;
-      }
-      .btn-action:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none !important;
-      }
-      .btn-action:not(:disabled):hover {
-        transform: scale(1.05);
-      }
-      .fade-in {
-        animation: fadeIn 0.4s ease both;
-      }
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(8px);
-        }
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-      .badge-cold {
-        background: linear-gradient(135deg, #1e3a5f, #0ea5e9);
-      }
-      .badge-hybrid {
-        background: linear-gradient(135deg, #3b1f5e, #a855f7);
-      }
-    </style>
-  </head>
+{% extends "base.html" %}
+{% block title %}Comparison — User #{{ profile.userId }}{% endblock %}
+{% block content %}
+  <div class="eyebrow">Live Recommendation Comparison</div>
+  <h1>User #{{ profile.userId }} — {{ profile.archetype }}</h1>
+  <p class="caption">
+    Prefers <span class="mono">{{ profile.preferred_genres | join(', ') }}</span> in
+    <span class="mono">{{ profile.preferred_language | join(', ') }}</span>.
+    All four columns below are computed live from the trained SVD model and TF-IDF
+    content matrix for this user — nothing here is cached.
+    <a href="/profile/{{ profile.userId }}">View full profile</a> ·
+    <a href="/">Change user</a>
+  </p>
 
-  <body
-    class="min-h-screen text-white"
-    data-user-id="{{ user.id }}"
-    data-is-cold="{{ 'true' if history_count == 0 else 'false' }}"
-  >
-    <nav
-      class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50"
-    >
-      <div class="flex items-center gap-3">
-        <span class="text-red-500 font-extrabold text-xl tracking-tight"
-          >RecoSys</span
-        >
-        <span
-          class="hidden sm:inline text-slate-500 text-xs border border-slate-700 rounded px-2 py-0.5"
-          >Thesis Prototype</span
-        >
+  <div class="compare-grid">
+    {% for col in columns %}
+    <div class="model-col {% if col.key == 'localized' %}localized{% endif %}">
+      <div class="model-title">{{ col.label }}</div>
+      <div class="model-sub">
+        {% if col.key == 'cf' %}Model 1 · Baseline
+        {% elif col.key == 'cbf' %}Model 2 · Baseline
+        {% elif col.key == 'hybrid' %}Model 3 · 0.60 CF + 0.40 CBF
+        {% else %}Model 4 · Proposed · 0.45 CF + 0.35 CBF + 0.20 Localization{% endif %}
       </div>
-      <div class="flex items-center gap-4">
-        <span class="text-slate-400 text-sm">👤 {{ user.username }}</span>
-        <a
-          href="/comparison"
-          class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-3 py-1 transition"
-          >Compare</a
-        >
-        <a
-          href="/architecture"
-          class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-3 py-1 transition"
-          >Architecture</a
-        >
-        <a
-          href="/admin"
-          class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-3 py-1 transition"
-          >⚙ Admin</a
-        >
-        <a
-          href="/"
-          class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-3 py-1 transition"
-          >← Exit</a
-        >
-      </div>
-    </nav>
 
-    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
-      {% if artifact_error %}
-      <div
-        class="bg-red-950/50 border border-red-800 rounded-xl p-4 text-red-200 text-sm"
-      >
-        {{ artifact_error }}
+      {% for r in col.recs %}
+      <div class="rec-row">
+        <span class="rec-rank">{{ r.rank }}</span>
+        <span class="rec-title">{{ r.title[:34] }}</span>
+        <span class="rec-score">{{ '%.3f' | format(r.score) }}</span>
+      </div>
+      {% endfor %}
+
+      {% if col.metrics %}
+      <div class="metrics-footer">
+        <span>P@10 <b>{{ col.metrics.precision_at_10 }}</b></span>
+        <span>R@10 <b>{{ col.metrics.recall_at_10 }}</b></span>
+        <span>NDCG@10 <b>{{ col.metrics.ndcg_at_10 }}</b></span>
       </div>
       {% endif %}
+    </div>
+    {% endfor %}
+  </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div
-          class="sm:col-span-1 rounded-2xl p-5 flex flex-col justify-center
-                {{ 'badge-cold' if history_count == 0 else 'badge-hybrid' }}"
-        >
-          {% if history_count == 0 %}
-          <p
-            class="text-xs font-bold uppercase tracking-widest text-sky-300 mb-1"
-          >
-            ❄ Cold-Start Mode
-          </p>
-          <p class="text-white font-semibold text-sm">
-            CBF + Preference Weighting
-          </p>
-          <p class="text-sky-200 text-xs mt-1">
-            No interaction history yet. Recommendations driven by your genre
-            &amp; language preferences.
-          </p>
-          {% else %}
-          <p
-            class="text-xs font-bold uppercase tracking-widest text-purple-300 mb-1"
-          >
-            ⚡ Hybrid Mode
-          </p>
-          <p class="text-white font-semibold text-sm">
-            SVD + CBF + Preferences
-          </p>
-          <p class="text-purple-200 text-xs mt-1">
-            Using {{ history_count }} past interactions. Full hybrid scoring
-            active.
-          </p>
-          {% endif %}
-        </div>
-
-        <div
-          class="sm:col-span-2 bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-3"
-        >
-          <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wide">
-            Your Preference Profile
-          </h2>
-          <div class="flex flex-wrap gap-2">
-            {% for lang in user.preferred_languages.split('|') %} {% if
-            lang.strip() %}
-            <span
-              class="px-3 py-1 bg-blue-900/60 border border-blue-700 text-blue-200 text-xs rounded-full font-medium"
-              >🌐 {{ lang.strip() }}</span
-            >
-            {% endif %} {% endfor %} {% for genre in
-            user.preferred_genres.split('|') %} {% if genre.strip() %}
-            <span
-              class="px-3 py-1 bg-slate-700 text-slate-200 text-xs rounded-full font-medium"
-              >🎬 {{ genre.strip() }}</span
-            >
-            {% endif %} {% endfor %}
-          </div>
-          <div class="flex gap-6 pt-1">
-            <div>
-              <p class="text-xs text-slate-500">Movies Watched</p>
-              <p
-                class="text-xl font-bold {% if history_count == 0 %}text-yellow-400{% else %}text-green-400{% endif %}"
-              >
-                {{ history_count }}
-              </p>
-            </div>
-            <div>
-              <p class="text-xs text-slate-500">Recs Generated</p>
-              <p class="text-xl font-bold text-white">
-                {{ recommendations|length }}
-              </p>
-            </div>
-            <div>
-              <p class="text-xs text-slate-500">Scoring Model</p>
-              <p
-                class="text-sm font-bold {% if history_count == 0 %}text-sky-400{% else %}text-purple-400{% endif %}"
-              >
-                {% if history_count == 0 %}Cold-Start CBF{% else %}Hybrid
-                SVD+CBF{% endif %}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        class="bg-slate-800/60 border border-slate-700 rounded-xl p-4 text-xs text-slate-400 flex flex-wrap gap-4"
-      >
-        <span
-          ><strong class="text-slate-300">RQ1:</strong> Does localised
-          language/genre weighting improve accuracy vs standard CF/CBF?</span
-        >
-        <span class="text-slate-600">|</span>
-        <span
-          ><strong class="text-slate-300">RQ2:</strong> Does demographic
-          weighting create filter bubbles or bias?</span
-        >
-        <span class="text-slate-600">|</span>
-        <a href="/admin" class="text-red-400 hover:text-red-300 underline"
-          >View evaluation results →</a
-        >
-        <span class="text-slate-600">|</span>
-        <span
-          ><strong class="text-slate-300">Method:</strong> real-only SVD;
-          synthetic users reserved for support/holdout evaluation.</span
-        >
-      </div>
-
-      <div>
-        <h2 class="text-lg font-bold text-white mb-4">
-          Top-10 Recommendations
-          <span class="ml-2 text-sm font-normal text-slate-400">
-            — {{ 'Cold-Start: CBF + Preference Score' if history_count == 0 else
-            'Hybrid: 0.5×SVD + 0.3×CBF + 0.2×Preference' }}
-          </span>
-        </h2>
-
-        {% if recommendations %}
-        <div
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
-          id="recs-grid"
-        >
-          {% for movie in recommendations %}
-          <div
-            class="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 flex flex-col fade-in"
-            data-index="{{ loop.index0 }}"
-          >
-            <div
-              class="h-36 bg-gradient-to-br from-slate-700 to-slate-900 flex items-end p-3"
-            >
-              <div>
-                <p
-                  class="text-white font-bold text-sm leading-snug line-clamp-2"
-                >
-                  {{ movie.title }}
-                </p>
-                <p class="text-xs text-slate-400 mt-0.5">
-                  #{{ loop.index }} &nbsp;·&nbsp; Score:
-                  <span class="text-white font-mono">{{ movie.score }}</span>
-                </p>
-              </div>
-            </div>
-
-            <div class="p-3 flex-grow flex flex-col gap-3">
-              <div class="flex flex-wrap gap-1">
-                <span
-                  class="px-2 py-0.5 bg-blue-900/70 text-blue-200 text-xs rounded-full border border-blue-800"
-                  >{{ movie.language }}</span
-                >
-                {% for genre in movie.genres.split()[:2] %} {% if genre.strip()
-                %}
-                <span
-                  class="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded-full"
-                  >{{ genre }}</span
-                >
-                {% endif %} {% endfor %}
-              </div>
-
-              <div
-                class="bg-amber-950/40 border-l-2 border-amber-500 px-2 py-2 text-xs text-amber-200 italic flex-grow"
-              >
-                {{ movie.explanation }}
-              </div>
-
-              <div
-                class="grid grid-cols-3 gap-1"
-                id="actions-{{ movie.movieId }}"
-              >
-                <button
-                  class="btn-action bg-green-700 hover:bg-green-600 text-white text-xs font-bold py-1.5 rounded-lg watchlist-btn"
-                  data-movie-id="{{ movie.movieId }}"
-                  data-action="like"
-                >
-                  👍 Like
-                </button>
-                <button
-                  class="btn-action bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold py-1.5 rounded-lg watchlist-btn"
-                  data-movie-id="{{ movie.movieId }}"
-                  data-action="watchlist"
-                >
-                  🔖 Save
-                </button>
-                <button
-                  class="btn-action bg-red-900/60 hover:bg-red-800 text-white text-xs font-bold py-1.5 rounded-lg watchlist-btn"
-                  data-movie-id="{{ movie.movieId }}"
-                  data-action="dislike"
-                >
-                  👎 Skip
-                </button>
-              </div>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-
-        {% else %}
-        <div
-          class="bg-slate-800 border border-slate-700 rounded-xl p-10 text-center text-slate-400"
-        >
-          <p class="text-2xl mb-2">🎬</p>
-          <p class="text-lg font-semibold text-white">No recommendations yet</p>
-          <p class="text-sm mt-1">
-            The engine may still be warming up. Try refreshing the page.
-          </p>
-        </div>
-        {% endif %}
-      </div>
-
-      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
-        <h3 class="text-sm font-bold text-slate-300 mb-3">
-          ⚡ Interaction Log
-          <span class="text-slate-500 font-normal text-xs ml-1"
-            >(stored in SQLite)</span
-          >
-        </h3>
-        <ul
-          id="interaction-log"
-          class="space-y-1 text-xs text-slate-400 max-h-32 overflow-y-auto"
-        >
-          <li class="text-slate-600 italic">
-            No interactions yet this session...
-          </li>
-        </ul>
-      </div>
-    </main>
-
-    <script>
-      const CURRENT_USER_ID = parseInt(document.body.dataset.userId, 10);
-      const IS_COLD = document.body.dataset.isCold === "true";
-      const log = document.getElementById("interaction-log");
-
-      function addLog(msg) {
-        const first = log.querySelector(".text-slate-600");
-        if (first) first.remove();
-        const li = document.createElement("li");
-        li.className = "text-slate-300";
-        li.textContent = new Date().toLocaleTimeString() + " \u2014 " + msg;
-        log.prepend(li);
-      }
-
-      document
-        .querySelectorAll(".fade-in[data-index]")
-        .forEach(function (card) {
-          card.style.animationDelay =
-            parseInt(card.dataset.index, 10) * 0.05 + "s";
-        });
-
-      document.querySelectorAll(".watchlist-btn").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          const movieId = parseInt(btn.dataset.movieId, 10);
-          const action = btn.dataset.action;
-          const container = document.getElementById("actions-" + movieId);
-
-          const formData = new FormData();
-          formData.append("user_id", CURRENT_USER_ID);
-          formData.append("movie_id", movieId);
-          formData.append("action", action);
-
-          fetch("/api/interact", { method: "POST", body: formData })
-            .then(function (r) {
-              return r.json();
-            })
-            .then(function (data) {
-              if (data.status === "success") {
-                container.querySelectorAll("button").forEach(function (b) {
-                  b.disabled = true;
-                });
-                const icons = {
-                  like: "\u2705 Liked",
-                  watchlist: "\uD83D\uDD16 Saved",
-                  dislike: "\u274C Skipped",
-                };
-                btn.textContent = icons[action] || "\u2713 Done";
-                btn.classList.add("ring-2", "ring-white/30");
-                addLog(action.toUpperCase() + " \u2192 movie #" + movieId);
-              }
-            })
-            .catch(function (err) {
-              console.error("Interaction error:", err);
-            });
-        });
-      });
-    </script>
-  </body>
-</html>
+  <p class="caption section-gap">
+    Metrics shown are precomputed on the held-out split (evaluation_user_level.csv),
+    not recalculated on page load — the ranked lists above are live, the scored
+    evaluation is fixed to keep the reported RQ1 statistics reproducible.
+  </p>
+{% endblock %}

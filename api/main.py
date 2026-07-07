@@ -1,11 +1,10 @@
+from __future__ import annotations
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from .routes import router
-import os
 
-app = FastAPI(title="RecoSys - BSc Thesis Prototype")
+from api.routes import router
 
-os.makedirs("api/static", exist_ok=True)
+app = FastAPI(title="Localized Hybrid Movie Recommender — Thesis Prototype")
 app.mount("/static", StaticFiles(directory="api/static"), name="static")
-
 app.include_router(router)

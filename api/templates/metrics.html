@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Metrics — RQ1{% endblock %}
+{% block content %}
+  <div class="eyebrow">RQ1 · Does localization improve ranking performance?</div>
+  <h1>Model performance</h1>
+  <p class="caption">Precision@10, Recall@10, and NDCG@10 across the four models, aggregated over the synthetic holdout split.</p>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        {% if performance %}
+          {% for key in performance[0].keys() %}<th>{{ key }}</th>{% endfor %}
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in performance %}
+      <tr>
+        {% for v in row.values() %}<td class="num">{{ v }}</td>{% endfor %}
+      </tr>
+      {% else %}
+      <tr><td class="num">rq1_model_performance.csv not found in results/</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="section-gap">Significance testing</h2>
+  <p class="caption">Paired t-test / Wilcoxon comparing Standard Hybrid vs. Localized Hybrid — tests H1 (localized hybrid ranks significantly better).</p>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        {% if significance %}
+          {% for key in significance[0].keys() %}<th>{{ key }}</th>{% endfor %}
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in significance %}
+      <tr>
+        {% for v in row.values() %}<td class="num">{{ v }}</td>{% endfor %}
+      </tr>
+      {% else %}
+      <tr><td class="num">rq1_significance_tests.csv not found in results/</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
