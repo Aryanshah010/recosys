@@ -25,6 +25,7 @@ TFIDF_NGRAM_RANGE = (1, 2)
 TFIDF_STOP_WORDS = "english"
 TFIDF_MIN_DF = 2
 
+BAYESIAN_MIN_VOTES_QUANTILE = 0.25
 
 GENRE_REPEAT_COUNT = 2
 
@@ -105,6 +106,54 @@ def build_content_soup(movies_df: pd.DataFrame) -> pd.Series:
     return soup
 
 
+def compute_quality_scores(movies_df: pd.DataFrame) -> np.ndarray:
+
+    vote_count = movies_df["vote_count"].fillna(0).astype(float).to_numpy()
+    vote_average = movies_df["vote_average"].fillna(0.0).astype(float).to_numpy()
+
+    has_votes_mask = vote_count > 0
+    n_with_votes = int(has_votes_mask.sum())
+
+    if n_with_votes == 0:
+        logger.warning(
+            "No movies with vote_count > 0 found. quality_scores will be all zeros."
+        )
+        return np.zeros(len(movies_df), dtype=np.float32)
+
+    C = float(vote_average[has_votes_mask].mean())
+
+    m = float(np.quantile(vote_count[has_votes_mask], BAYESIAN_MIN_VOTES_QUANTILE))
+
+    m = max(m, 1.0)
+
+    logger.info(
+        "Bayesian WR params: C=%.3f, m=%.1f (from %.0f%% quantile of %d movies with votes).",
+        C,
+        m,
+        BAYESIAN_MIN_VOTES_QUANTILE * 100,
+        n_with_votes,
+    )
+
+    wr = (vote_count / (vote_count + m)) * vote_average + (m / (vote_count + m)) * C
+    wr[~has_votes_mask] = 0.0
+
+    lo, hi = wr.min(), wr.max()
+    if hi - lo < 1e-8:
+        logger.warning("quality_scores have no variance; returning zeros.")
+        return np.zeros(len(movies_df), dtype=np.float32)
+
+    quality_scores = ((wr - lo) / (hi - lo)).astype(np.float32)
+
+    logger.info(
+        "quality_scores computed: min=%.4f, max=%.4f, mean=%.4f (non-zero movies: %d).",
+        float(quality_scores.min()),
+        float(quality_scores.max()),
+        float(quality_scores.mean()),
+        int((quality_scores > 0).sum()),
+    )
+    return quality_scores
+
+
 def get_matrix_shape(matrix: csr_matrix) -> tuple[int, int]:
 
     return cast(tuple[int, int], matrix.shape)
@@ -170,7 +219,9 @@ def validate_matrix(matrix: csr_matrix, movies_df: pd.DataFrame) -> None:
 
 
 def build_metadata(
-    movies_df: pd.DataFrame, vectorizer: TfidfVectorizer
+    movies_df: pd.DataFrame,
+    vectorizer: TfidfVectorizer,
+    quality_scores: np.ndarray,
 ) -> dict[str, object]:
 
     return {
@@ -186,6 +237,7 @@ def build_metadata(
         "feature_names": vectorizer.get_feature_names_out().tolist(),
         "n_movies": len(movies_df),
         "n_features": len(vectorizer.get_feature_names_out()),
+        "quality_scores": quality_scores,
     }
 
 
@@ -208,7 +260,8 @@ def main() -> None:
     soup = build_content_soup(movies_df)
     matrix, vectorizer = build_tfidf_matrix(soup)
     validate_matrix(matrix, movies_df)
-    metadata = build_metadata(movies_df, vectorizer)
+    quality_scores = compute_quality_scores(movies_df)
+    metadata = build_metadata(movies_df, vectorizer, quality_scores)
     save_artifacts(matrix, metadata)
 
     logger.info("Pipeline execution complete.")

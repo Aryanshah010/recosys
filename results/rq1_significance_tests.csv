@@ -1,0 +1,7 @@
+Model_A,Model_B,N,Mean_A,Mean_B,t_statistic,p_value,Cohens_d,Significant_p<0.05
+CF,CBF,200,0.0004,0.001,-0.6696,0.503865,-0.0474,✗
+CF,NonLocal_Hybrid,200,0.0004,0.0004,0.0675,0.946251,0.0048,✗
+CF,Localized_Hybrid,200,0.0004,0.0039,-2.1845,0.030092,-0.1545,✓
+CBF,NonLocal_Hybrid,200,0.001,0.0004,1.062,0.289519,0.0751,✗
+CBF,Localized_Hybrid,200,0.001,0.0039,-1.5068,0.133442,-0.1065,✗
+NonLocal_Hybrid,Localized_Hybrid,200,0.0004,0.0039,-1.9203,0.056251,-0.1358,✗

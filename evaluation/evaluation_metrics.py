@@ -1,8 +1,11 @@
+from __future__ import annotations
+
+import logging
 import os
-import pickle
 import warnings
 from itertools import combinations
 
+import joblib
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -10,446 +13,658 @@ from surprise import dump
 
 warnings.filterwarnings("ignore")
 
-SVD_MODEL = "data/processed/svd_model.pkl"
-SYNTH_RATINGS = "data/processed/synthetic_interactions.csv"
-SYNTH_PROFILES = "data/processed/synthetic_user_profiles.csv"
-CBF_MATRIX = "data/processed/cbf_matrix.pkl"
-CBF_META = "data/processed/cbf_metadata.pkl"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+SVD_MODEL_PATH = "data/processed/svd_model.pkl"
+SYNTH_RATINGS = "data/processed/synthetic_ratings.csv"
+SYNTH_USERS = "data/processed/synthetic_users.csv"
+CBF_MATRIX_PATH = "data/processed/cbf_matrix.pkl"
+CBF_META_PATH = "data/processed/cbf_metadata.pkl"
 MOVIES_FINAL = "data/processed/movies_final.csv"
 RESULTS_DIR = "results"
 
-K = 10
-MAX_EVAL_USERS = 150
-SUPPORT_RATIO = 0.7
-RANDOM_SEED = 42
-MODEL_ORDER = ["CF", "CBF", "NonLocal_Hybrid", "Localized_Hybrid"]
-
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-GENRE_MAPPING = {
-    "Sci-Fi": "ScienceFiction",
-    "Science Fiction": "ScienceFiction",
-    "Anime": "Animation",
-    "Children's": "Family",
-    "Childrens": "Family",
-    "Bollywood": "Drama",
-    "Tollywood": "Action",
+K = 10
+MAX_EVAL_USERS = 200  # cap to keep runtime manageable
+MIN_HOLDOUT_POS = 1  # minimum liked holdout items required
+HOLDOUT_RATING_THRESHOLD = 3.5
+RANDOM_SEED = 42
+
+MODEL_ORDER = ["CF", "CBF", "NonLocal_Hybrid", "Localized_Hybrid"]
+
+STANDARD_CF_W = 0.60
+STANDARD_CBF_W = 0.40
+LOCAL_CF_W = 0.45
+LOCAL_CBF_W = 0.35
+LOCAL_LOC_W = 0.20
+
+LOC_GENRE_W = 0.60
+LOC_LANG_W = 0.40
+
+LANGUAGE_PREF_SCORE: dict[str, float] = {
+    "English": 1.00,
+    "Hindi": 0.90,
+    "Japanese": 0.85,
+    "Korean": 0.80,
+    "Nepali": 0.75,
 }
-LANGUAGE_MAPPING = {
-    "HINDI": "HI",
-    "ENGLISH": "EN",
-    "NEPALI": "NE",
-    "JAPANESE": "JA",
-    "KOREAN": "KO",
-    "FRENCH": "FR",
-    "SPANISH": "ES",
-    "GERMAN": "DE",
-    "CHINESE": "ZH",
+
+GENRE_LOC_WEIGHT: dict[str, float] = {
+    "Sci-Fi": 1.00,
+    "Action": 0.95,
+    "Thriller": 0.90,
+    "Adventure": 0.85,
+    "Fantasy": 0.80,
+    "Crime": 0.75,
+    "Animation": 0.70,
+    "Comedy": 0.65,
+    "Drama": 0.60,
+    "Mystery": 0.55,
+    "Romance": 0.40,
+    "Horror": 0.40,
+    "Family": 0.35,
+    "History": 0.30,
+    "War": 0.30,
+    "Documentary": 0.20,
+    "Music": 0.20,
+    "Western": 0.15,
+    "TV": 0.15,
 }
 
 
-def normalize_prefs(profile):
-    langs_raw = str(profile.get("preferred_languages", "")).split("|")
-    genres_raw = str(profile.get("preferred_genres", "")).split("|")
-
-    langs = {
-        LANGUAGE_MAPPING.get(lang.strip().upper(), lang.strip().upper())
-        for lang in langs_raw
-        if lang.strip()
-    }
-    genres = {
-        GENRE_MAPPING.get(genre.strip(), genre.strip().replace(" ", ""))
-        for genre in genres_raw
-        if genre.strip()
-    }
-    return langs, genres
+def _check(path: str) -> None:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Required file not found: {path}")
 
 
-def get_matrix_idx(cbf_indices, movie_id):
-    idx_val = cbf_indices.get(movie_id)
-    if idx_val is None:
-        return None
-    if isinstance(idx_val, pd.Series):
-        return int(idx_val.iloc[0])
-    return int(idx_val)
+def load_all_artifacts() -> tuple:
 
+    logger.info("Loading SVD model …")
+    _check(SVD_MODEL_PATH)
+    _, svd = dump.load(SVD_MODEL_PATH)
 
-def split_support_holdout(user_rows):
-    rows = user_rows.sort_values(["rating", "movieId"], ascending=[False, True])
-    positives = rows[rows["rating"] >= 4.0]
+    logger.info("Loading synthetic cohort …")
+    _check(SYNTH_RATINGS)
+    _check(SYNTH_USERS)
+    ratings_df = pd.read_csv(SYNTH_RATINGS)
+    users_df = pd.read_csv(SYNTH_USERS)
 
-    if len(positives) < 2:
-        return [], []
+    logger.info("Loading CBF matrix and metadata …")
+    _check(CBF_MATRIX_PATH)
+    _check(CBF_META_PATH)
+    cbf_matrix = joblib.load(CBF_MATRIX_PATH)
+    cbf_meta = joblib.load(CBF_META_PATH)
 
-    holdout_count = max(1, int(round(len(positives) * (1 - SUPPORT_RATIO))))
-    holdout = positives.tail(holdout_count)
-    support = rows.drop(index=holdout.index)
+    logger.info("Loading movies catalog …")
+    _check(MOVIES_FINAL)
+    movies_df = pd.read_csv(MOVIES_FINAL)
 
-    support_history = support["movieId"].astype(int).tolist()
-    ground_truth = holdout["movieId"].astype(int).tolist()
-    return support_history, ground_truth
-
-
-def preference_score(movie_row, pref_langs, pref_genres):
-    score = 0.0
-    m_lang = str(movie_row.get("language", "")).upper()
-    m_genres = set(str(movie_row.get("clean_genres", "")).split())
-
-    if m_lang in pref_langs:
-        score += 0.6
-    if not m_genres.isdisjoint(pref_genres):
-        score += 0.4
-    return score
-
-
-def adaptive_weights(history_len):
-    if history_len == 0:
-        return {"cf": 0.0, "cbf": 0.7, "pref": 0.3}
-    if history_len < 5:
-        return {"cf": 0.2, "cbf": 0.5, "pref": 0.3}
-    if history_len < 15:
-        return {"cf": 0.4, "cbf": 0.4, "pref": 0.2}
-    return {"cf": 0.6, "cbf": 0.2, "pref": 0.2}
-
-
-def build_candidates(
-    valid_history,
-    support_history,
-    ground_truth,
-    cosine_sim,
-    cbf_meta,
-    cbf_indices,
-    movies_meta,
-):
-    candidates = set()
-
-    if valid_history:
-        safe_idxs = [
-            get_matrix_idx(cbf_indices, movie_id) for movie_id in valid_history
-        ]
-        safe_idxs = [idx for idx in safe_idxs if idx is not None]
-
-        if safe_idxs:
-            sim_scores = np.mean(cosine_sim[np.unique(safe_idxs), :], axis=0)
-            top_count = min(500, len(sim_scores))
-            top_cbf_idx = np.argsort(sim_scores)[-top_count:]
-            candidates.update(
-                cbf_meta.iloc[top_cbf_idx]["movieId"].astype(int).tolist()
-            )
-
-    candidates.update(
-        movies_meta.nlargest(500, "vote_count")["movieId"].astype(int).tolist()
+    movie_ids = cbf_meta["movie_ids"]
+    movie_index = cbf_meta["movie_index"]
+    titles = cbf_meta["titles"]
+    clean_genres = cbf_meta["clean_genres"]
+    language = cbf_meta["language"]
+    quality_scores = cbf_meta.get(
+        "quality_scores", np.zeros(len(movie_ids), dtype=np.float32)
     )
-    # Rank held-out positives among realistic negatives. The held-out ratings
-    # are not used for scoring; they only define relevance for metrics.
-    candidates.update(ground_truth)
-    return list(candidates - set(support_history))
+
+    logger.info(
+        "Artifacts loaded: %d CBF movies, %d synthetic ratings, %d synthetic users.",
+        len(movie_ids),
+        len(ratings_df),
+        len(users_df),
+    )
+    return (
+        svd,
+        ratings_df,
+        users_df,
+        cbf_matrix,
+        movie_ids,
+        movie_index,
+        titles,
+        clean_genres,
+        language,
+        quality_scores,
+        movies_df,
+    )
 
 
-def calculate_metrics(top_k, ground_truth, cbf_meta, pref_langs, pref_genres):
-    hits = len(set(top_k).intersection(set(ground_truth)))
-    precision = hits / K
-    recall = hits / len(ground_truth) if ground_truth else 0
+def _parse_pipe_list(s: str) -> list[str]:
+    return [x.strip() for x in str(s).split("|") if x.strip()]
 
-    relevance = [1 if movie_id in ground_truth else 0 for movie_id in top_k]
-    dcg = sum(rel / np.log2(rank + 2) for rank, rel in enumerate(relevance))
-    ideal_relevance = sorted([1] * min(len(ground_truth), K), reverse=True)
-    idcg = sum(rel / np.log2(rank + 2) for rank, rel in enumerate(ideal_relevance))
-    ndcg = dcg / idcg if idcg > 0 else 0
 
-    top_k_meta = cbf_meta[cbf_meta["movieId"].isin(top_k)]
-    unique_langs = top_k_meta["language"].nunique() if len(top_k_meta) > 0 else 0
-    all_genres = " ".join(top_k_meta["clean_genres"].fillna("").astype(str)).split()
-    unique_genres = len(set(all_genres))
+def build_holdout_split(
+    ratings_df: pd.DataFrame,
+) -> dict[int, tuple[list[int], list[int]]]:
 
-    bubble_matches = 0
-    novelty_matches = 0
-    for movie_id in top_k:
-        rows = top_k_meta[top_k_meta["movieId"] == movie_id]
-        if rows.empty:
-            novelty_matches += 1
+    splits: dict[int, tuple[list[int], list[int]]] = {}
+    for uid, grp in ratings_df.groupby("userId"):
+        train_ids = grp.loc[grp["split"] == "train", "movieId"].astype(int).tolist()
+        holdout_pos = (
+            grp.loc[
+                (grp["split"] == "holdout")
+                & (grp["rating"] >= HOLDOUT_RATING_THRESHOLD),
+                "movieId",
+            ]
+            .astype(int)
+            .tolist()
+        )
+        if len(holdout_pos) >= MIN_HOLDOUT_POS:
+            splits[int(uid)] = (train_ids, holdout_pos)  # type: ignore
+    return splits
+
+
+def build_candidate_set(
+    train_ids: list[int],
+    holdout_pos: list[int],
+    movie_index: dict,
+    cbf_matrix,
+    movie_ids: np.ndarray,
+    movies_df: pd.DataFrame,
+) -> list[int]:
+
+    candidates: set[int] = set()
+
+    valid_idxs = [movie_index[m] for m in train_ids if m in movie_index]
+    if valid_idxs:
+        from sklearn.metrics.pairwise import linear_kernel
+
+        sim_scores = linear_kernel(cbf_matrix[valid_idxs], cbf_matrix).mean(axis=0)
+        top_n = min(500, len(sim_scores))
+        top_cbf_idx = np.argsort(sim_scores)[-top_n:]
+        candidates.update(movie_ids[top_cbf_idx].tolist())
+
+    pop_ids = movies_df.nlargest(500, "vote_count")["movieId"].astype(int).tolist()
+    candidates.update(pop_ids)
+    candidates.update(holdout_pos)
+
+    candidates -= set(train_ids)
+    return list(candidates)
+
+
+def compute_localization_score(
+    movie_ids_cands: list[int],
+    movie_index: dict,
+    clean_genres: list[str],
+    language: list[str],
+    pref_genres: list[str],
+    pref_languages: list[str],
+) -> dict[int, float]:
+
+    pref_lang_set = set(pref_languages)
+    scores: dict[int, float] = {}
+    for mid in movie_ids_cands:
+        idx = movie_index.get(mid)
+        if idx is None:
+            scores[mid] = 0.0
             continue
 
-        row = rows.iloc[0]
-        movie_lang = str(row.get("language", "")).upper()
-        movie_genres = set(str(row.get("clean_genres", "")).split())
-        matches_pref = movie_lang in pref_langs or not movie_genres.isdisjoint(
-            pref_genres
+        movie_genre_list = [g for g in str(clean_genres[idx]).split("|") if g]
+        genre_score = 0.0
+        if pref_genres and movie_genre_list:
+            matched = [
+                GENRE_LOC_WEIGHT.get(g, 0.0)
+                for g in movie_genre_list
+                if g in pref_genres
+            ]
+            genre_score = float(np.mean(matched)) if matched else 0.0
+
+        m_lang = language[idx]
+        lang_score = (
+            LANGUAGE_PREF_SCORE.get(m_lang, 0.0) if m_lang in pref_lang_set else 0.0
+        )
+        scores[mid] = LOC_GENRE_W * genre_score + LOC_LANG_W * lang_score
+    return scores
+
+
+def score_all_models(
+    uid: int,
+    train_ids: list[int],
+    candidates: list[int],
+    pref_genres: list[str],
+    pref_languages: list[str],
+    svd,
+    cbf_matrix,
+    movie_index: dict,
+    quality_scores: np.ndarray,
+    clean_genres: list[str],
+    language: list[str],
+) -> dict[str, list[tuple[int, float]]]:
+
+    QUALITY_ALPHA = 0.15
+
+    valid_train_idxs = [movie_index[m] for m in train_ids if m in movie_index]
+    if valid_train_idxs:
+        from sklearn.metrics.pairwise import linear_kernel
+
+        raw_sims = linear_kernel(cbf_matrix[valid_train_idxs], cbf_matrix).mean(axis=0)
+        lo, hi = raw_sims.min(), raw_sims.max()
+        norm_sims = (
+            (raw_sims - lo) / (hi - lo) if hi - lo > 1e-8 else np.zeros_like(raw_sims)
+        )
+        cbf_arr = (1 - QUALITY_ALPHA) * norm_sims + QUALITY_ALPHA * quality_scores
+    else:
+        cbf_arr = quality_scores.copy()
+
+    loc_scores = compute_localization_score(
+        candidates, movie_index, clean_genres, language, pref_genres, pref_languages
+    )
+
+    loc_vals = np.array([loc_scores[m] for m in candidates], dtype=np.float32)
+    lo, hi = loc_vals.min(), loc_vals.max()
+    if hi - lo > 1e-8:
+        loc_vals = (loc_vals - lo) / (hi - lo)
+    loc_norm = {m: float(v) for m, v in zip(candidates, loc_vals)}
+
+    model_scores: dict[str, list[tuple[int, float]]] = {
+        name: [] for name in MODEL_ORDER
+    }
+
+    for mid in candidates:
+        idx = movie_index.get(mid)
+        if idx is None:
+            continue
+
+        cf_pred = float(svd.predict(uid, mid).est) / 5.0
+
+        cbf_s = float(cbf_arr[idx])
+
+        loc_s = loc_norm.get(mid, 0.0)
+
+        model_scores["CF"].append((mid, cf_pred))
+        model_scores["CBF"].append((mid, cbf_s))
+        model_scores["NonLocal_Hybrid"].append(
+            (mid, STANDARD_CF_W * cf_pred + STANDARD_CBF_W * cbf_s)
+        )
+        model_scores["Localized_Hybrid"].append(
+            (mid, LOCAL_CF_W * cf_pred + LOCAL_CBF_W * cbf_s + LOCAL_LOC_W * loc_s)
         )
 
-        if matches_pref:
-            bubble_matches += 1
-        else:
-            novelty_matches += 1
+    return model_scores
+
+
+def precision_at_k(top_k: list[int], ground_truth: list[int]) -> float:
+
+    hits = len(set(top_k) & set(ground_truth))
+    return hits / K
+
+
+def recall_at_k(top_k: list[int], ground_truth: list[int]) -> float:
+
+    if not ground_truth:
+        return 0.0
+    hits = len(set(top_k) & set(ground_truth))
+    return hits / len(ground_truth)
+
+
+def ndcg_at_k(top_k: list[int], ground_truth: list[int]) -> float:
+
+    gt_set = set(ground_truth)
+    dcg = sum(
+        1.0 / np.log2(rank + 2) for rank, mid in enumerate(top_k) if mid in gt_set
+    )
+    ideal_hits = min(len(ground_truth), K)
+    idcg = sum(1.0 / np.log2(rank + 2) for rank in range(ideal_hits))
+    return dcg / idcg if idcg > 0 else 0.0
+
+
+def language_diversity(top_k: list[int], movie_index: dict, language: list[str]) -> int:
+
+    langs = {language[movie_index[m]] for m in top_k if m in movie_index}
+    return len(langs)
+
+
+def genre_diversity(
+    top_k: list[int], movie_index: dict, clean_genres: list[str]
+) -> int:
+
+    genres: set[str] = set()
+    for mid in top_k:
+        idx = movie_index.get(mid)
+        if idx is not None:
+            genres.update(g for g in str(clean_genres[idx]).split("|") if g)
+    return len(genres)
+
+
+def filter_bubble_score(
+    top_k: list[int],
+    pref_genres: list[str],
+    pref_languages: list[str],
+    movie_index: dict,
+    clean_genres: list[str],
+    language: list[str],
+) -> float:
+
+    pref_lang_set = set(pref_languages)
+    pref_genre_set = set(pref_genres)
+    matches = 0
+    for mid in top_k:
+        idx = movie_index.get(mid)
+        if idx is None:
+            continue
+        m_lang = language[idx]
+        m_genres = set(g for g in str(clean_genres[idx]).split("|") if g)
+        if m_lang in pref_lang_set or bool(m_genres & pref_genre_set):
+            matches += 1
+    return matches / K
+
+
+def compute_metrics(
+    top_k: list[int],
+    ground_truth: list[int],
+    pref_genres: list[str],
+    pref_languages: list[str],
+    movie_index: dict,
+    clean_genres: list[str],
+    language: list[str],
+) -> dict:
 
     return {
-        "Precision@10": round(precision, 4),
-        "Recall@10": round(recall, 4),
-        "NDCG@10": round(ndcg, 4),
-        "Novelty@10": round(novelty_matches / K, 4),
-        "Language_Diversity": unique_langs,
-        "Genre_Diversity": unique_genres,
-        "Filter_Bubble_Score": round(bubble_matches / K, 4),
-        "Hits@10": hits,
+        # RQ1
+        "Precision@10": round(precision_at_k(top_k, ground_truth), 4),
+        "Recall@10": round(recall_at_k(top_k, ground_truth), 4),
+        "NDCG@10": round(ndcg_at_k(top_k, ground_truth), 4),
+        # RQ2
+        "Language_Diversity": language_diversity(top_k, movie_index, language),
+        "Genre_Diversity": genre_diversity(top_k, movie_index, clean_genres),
+        "Filter_Bubble_Score": round(
+            filter_bubble_score(
+                top_k, pref_genres, pref_languages, movie_index, clean_genres, language
+            ),
+            4,
+        ),
     }
 
 
-def main():
-    print("Loading real-only SVD model and evaluation artifacts...")
-    if not os.path.exists(SVD_MODEL):
-        raise FileNotFoundError(
-            "Missing real-only SVD model. Run 'uv run python engine/collaborative_filter.py' first."
-        )
+def run_evaluation() -> pd.DataFrame:
 
-    _, svd = dump.load(SVD_MODEL)
-    synth_df = pd.read_csv(SYNTH_RATINGS)
-    profiles_df = pd.read_csv(SYNTH_PROFILES)
-    movies_meta = pd.read_csv(MOVIES_FINAL)
+    (
+        svd,
+        ratings_df,
+        users_df,
+        cbf_matrix,
+        movie_ids,
+        movie_index,
+        titles,
+        clean_genres,
+        language,
+        quality_scores,
+        movies_df,
+    ) = load_all_artifacts()
 
-    synth_df["userId"] = synth_df["userId"].astype(str)
-    profiles_df["user_id"] = profiles_df["user_id"].astype(str)
+    splits = build_holdout_split(ratings_df)
+    logger.info("Users with ≥%d holdout positive: %d", MIN_HOLDOUT_POS, len(splits))
 
-    print("Loading CBF artifacts...")
-    with open(CBF_MATRIX, "rb") as f:
-        cosine_sim = pickle.load(f)
-    with open(CBF_META, "rb") as f:
-        cbf_meta = pickle.load(f)
-
-    cbf_indices = pd.Series(cbf_meta.index, index=cbf_meta["movieId"])
-    cbf_indices = cbf_indices[~cbf_indices.index.duplicated(keep="first")]
-
-    print("Running synthetic support/holdout evaluation.")
-    print("SVD source: real MovieLens ratings only.")
-    print(
-        "Synthetic cohort source: evaluation support history + held-out positives only."
-    )
+    users_df["userId"] = users_df["userId"].astype(int)
+    user_profile = users_df.set_index("userId").to_dict("index")
 
     rng = np.random.default_rng(RANDOM_SEED)
-    candidate_users = []
-    user_splits = {}
+    eval_uids = sorted(splits.keys())
+    if len(eval_uids) > MAX_EVAL_USERS:
+        eval_uids = sorted(
+            rng.choice(eval_uids, size=MAX_EVAL_USERS, replace=False).tolist()
+        )
+    logger.info("Evaluating %d users …", len(eval_uids))
 
-    for uid, user_rows in synth_df.groupby("userId"):
-        support_history, ground_truth = split_support_holdout(user_rows)
-        if len(support_history) == 0 or len(ground_truth) == 0:
-            continue
-        candidate_users.append(uid)
-        user_splits[uid] = (support_history, ground_truth)
+    rows = []
+    for i, uid in enumerate(eval_uids):
+        if (i + 1) % 50 == 0:
+            logger.info("  … %d / %d users done", i + 1, len(eval_uids))
 
-    eval_users = sorted(candidate_users)
-    if len(eval_users) > MAX_EVAL_USERS:
-        eval_users = sorted(rng.choice(eval_users, size=MAX_EVAL_USERS, replace=False))
+        train_ids, holdout_pos = splits[uid]
+        profile = user_profile.get(uid, {})
+        pref_genres = _parse_pipe_list(profile.get("preferred_genres", ""))
+        pref_languages = _parse_pipe_list(profile.get("preferred_language", ""))
+        archetype = str(profile.get("archetype", "unknown"))
 
-    results = []
-
-    for uid in eval_users:
-        profile_match = profiles_df[profiles_df["user_id"] == str(uid)]
-        if profile_match.empty:
-            continue
-
-        profile = profile_match.iloc[0]
-        pref_langs, pref_genres = normalize_prefs(profile)
-        support_history, ground_truth = user_splits[uid]
-        valid_history = [
-            movie_id for movie_id in support_history if movie_id in cbf_indices.index
-        ]
-
-        candidates = build_candidates(
-            valid_history,
-            support_history,
-            ground_truth,
-            cosine_sim,
-            cbf_meta,
-            cbf_indices,
-            movies_meta,
+        candidates = build_candidate_set(
+            train_ids, holdout_pos, movie_index, cbf_matrix, movie_ids, movies_df
         )
         if not candidates:
+            logger.warning("uid=%d: empty candidate set, skipping.", uid)
             continue
 
-        model_scores = {model: [] for model in MODEL_ORDER}
-        weights = adaptive_weights(len(valid_history))
+        model_scores = score_all_models(
+            uid,
+            train_ids,
+            candidates,
+            pref_genres,
+            pref_languages,
+            svd,
+            cbf_matrix,
+            movie_index,
+            quality_scores,
+            clean_genres,
+            language,
+        )
 
-        for mid in candidates:
-            matrix_idx = get_matrix_idx(cbf_indices, mid)
-            if matrix_idx is None:
-                continue
-
-            movie_row = cbf_meta.loc[matrix_idx]
-            cf_pred = svd.predict(str(uid), mid).est / 5.0
-
-            cbf_score = 0.0
-            if valid_history:
-                history_idxs = [get_matrix_idx(cbf_indices, h) for h in valid_history]
-                history_idxs = [idx for idx in history_idxs if idx is not None]
-                if history_idxs:
-                    cbf_score = float(
-                        np.mean(
-                            [cosine_sim[h_idx][matrix_idx] for h_idx in history_idxs]
-                        )
-                    )
-
-            pref_score = preference_score(movie_row, pref_langs, pref_genres)
-
-            model_scores["CF"].append((mid, cf_pred))
-            model_scores["CBF"].append((mid, cbf_score))
-            model_scores["NonLocal_Hybrid"].append(
-                (mid, 0.625 * cf_pred + 0.375 * cbf_score)
-            )
-            model_scores["Localized_Hybrid"].append(
-                (
-                    mid,
-                    weights["cf"] * cf_pred
-                    + weights["cbf"] * cbf_score
-                    + weights["pref"] * pref_score,
-                )
-            )
-
-        for model_name, scores in model_scores.items():
+        for model_name in MODEL_ORDER:
             top_k = [
-                movie_id
-                for movie_id, _ in sorted(scores, key=lambda x: x[1], reverse=True)[:K]
+                mid
+                for mid, _ in sorted(
+                    model_scores[model_name], key=lambda x: x[1], reverse=True
+                )[:K]
             ]
-            metrics = calculate_metrics(
-                top_k, ground_truth, cbf_meta, pref_langs, pref_genres
+            metrics = compute_metrics(
+                top_k,
+                holdout_pos,
+                pref_genres,
+                pref_languages,
+                movie_index,
+                clean_genres,
+                language,
             )
-            results.append(
+            rows.append(
                 {
                     "UserId": uid,
+                    "Archetype": archetype,
                     "Model": model_name,
-                    "Archetype": profile.get("cohort_group", "Unknown"),
-                    "Support_History_Count": len(support_history),
-                    "Heldout_Positive_Count": len(ground_truth),
+                    "Train_Count": len(train_ids),
+                    "Holdout_Pos": len(holdout_pos),
                     "Candidate_Count": len(candidates),
-                    "TopK_MovieIds": "|".join(str(movie_id) for movie_id in top_k),
                     **metrics,
                 }
             )
 
-    if not results:
-        print("No valid evaluation results generated. Check data alignment.")
-        return
+    return pd.DataFrame(rows)
 
-    results_df = pd.DataFrame(results)
-    user_level_path = f"{RESULTS_DIR}/thesis_evaluation_user_level.csv"
-    results_df.to_csv(user_level_path, index=False)
 
-    summary_table = (
-        results_df.groupby("Model")
-        .agg(
-            {
-                "Precision@10": ["mean", "std"],
-                "Recall@10": ["mean", "std"],
-                "NDCG@10": ["mean", "std"],
-                "Filter_Bubble_Score": ["mean", "std"],
-                "Language_Diversity": "mean",
-                "Genre_Diversity": "mean",
-                "Novelty@10": ["mean", "std"],
-            }
-        )
-        .round(4)
-    )
-    summary_table.columns = [
-        "_".join(str(part) for part in column if part).strip("_")
-        if isinstance(column, tuple)
-        else str(column)
-        for column in list(summary_table.columns)
-    ]
-    summary_table = summary_table.reset_index()
+def print_section(title: str) -> None:
+    print(f"\n{'=' * 70}")
+    print(f"  {title}")
+    print(f"{'=' * 70}")
 
-    print("\nTABLE 1: MODEL PERFORMANCE")
-    print(summary_table)
-    summary_table.to_csv(f"{RESULTS_DIR}/thesis_summary_by_model.csv", index=False)
 
-    significance_rows = []
-    print("\nSTATISTICAL SIGNIFICANCE TESTS")
-    for model_a, model_b in combinations(MODEL_ORDER, 2):
-        paired = results_df[results_df["Model"].isin([model_a, model_b])].pivot(
-            index="UserId", columns="Model", values="NDCG@10"
-        )
-        paired = paired.dropna()
-        scores_a = pd.to_numeric(paired[model_a], errors="coerce").to_numpy(dtype=float)
-        scores_b = pd.to_numeric(paired[model_b], errors="coerce").to_numpy(dtype=float)
+def report_rq1(df: pd.DataFrame) -> None:
 
-        row = {
-            "Model_A": model_a,
-            "Model_B": model_b,
-            "Metric": "NDCG@10",
-            "N": len(paired),
-            "Mean_A": round(float(scores_a.mean()), 4) if len(scores_a) else 0,
-            "Mean_B": round(float(scores_b.mean()), 4) if len(scores_b) else 0,
-            "T_Statistic": "",
-            "P_Value": "",
-            "Cohens_D": "",
-        }
-
-        diff = scores_a - scores_b
-        if len(scores_a) > 1 and len(scores_b) > 1 and np.var(diff) > 0:
-            t_stat, p_value = stats.ttest_rel(scores_a, scores_b)
-            effect_size = diff.mean() / diff.std(ddof=1) if diff.std(ddof=1) > 0 else 0
-            row.update(
-                {
-                    "T_Statistic": round(float(t_stat), 4),
-                    "P_Value": round(float(p_value), 6),
-                    "Cohens_D": round(float(effect_size), 4),
-                }
-            )
-            print(
-                f"{model_a} vs {model_b}: t={t_stat:.3f}, p={p_value:.4f}, Cohen's d={effect_size:.3f}"
-            )
-        else:
-            print(f"{model_a} vs {model_b}: not enough variance for paired t-test")
-
-        significance_rows.append(row)
-
-    pd.DataFrame(significance_rows).to_csv(
-        f"{RESULTS_DIR}/thesis_significance_tests.csv", index=False
-    )
-
-    print("\n95% CONFIDENCE INTERVALS")
-    for model in MODEL_ORDER:
-        model_scores = results_df[results_df["Model"] == model]["NDCG@10"]
-        scores = pd.to_numeric(model_scores, errors="coerce").to_numpy(dtype=float)
-        mean = scores.mean()
-        if len(scores) > 1 and stats.sem(scores) > 0:
-            ci = stats.t.interval(
-                0.95, len(scores) - 1, loc=mean, scale=stats.sem(scores)
-            )
-            print(f"{model}: NDCG@10 = {mean:.4f} [{ci[0]:.4f}, {ci[1]:.4f}]")
-        else:
-            print(f"{model}: NDCG@10 = {mean:.4f} [N/A]")
-
-    print("\nFAIRNESS ANALYSIS: BIAS BY ARCHETYPE")
-    archetype_perf = results_df.groupby("Archetype")[
-        ["Precision@10", "Recall@10", "NDCG@10", "Filter_Bubble_Score"]
-    ].mean()
-    print(archetype_perf)
-
-    for metric in ["Precision@10", "Recall@10", "NDCG@10"]:
-        disparity = archetype_perf[metric].max() - archetype_perf[metric].min()
-        print(f"\n{metric} Disparity (Fairness Gap): {disparity:.4f}")
-        print(
-            f"  Best: {archetype_perf[metric].idxmax()} ({archetype_perf[metric].max():.4f})"
-        )
-        print(
-            f"  Worst: {archetype_perf[metric].idxmin()} ({archetype_perf[metric].min():.4f})"
-        )
-
-    print("\nFILTER BUBBLE ANALYSIS (RQ2 FOCUS)")
-    bubble_by_arch = (
-        results_df.groupby(["Model", "Archetype"])["Filter_Bubble_Score"]
-        .mean()
-        .unstack()
-    )
-    print(bubble_by_arch)
-    print("\nInterpretation: Higher = more preference-locked recommendations.")
+    print_section("TABLE 1: MODEL PERFORMANCE (RQ1 — Precision, Recall, NDCG)")
 
     summary = (
-        results_df.groupby(["Model", "Archetype"]).mean(numeric_only=True).reset_index()
+        df.groupby("Model")[["Precision@10", "Recall@10", "NDCG@10"]]
+        .agg(["mean", "std"])
+        .round(4)
     )
-    summary.to_csv(f"{RESULTS_DIR}/thesis_evaluation_metrics.csv", index=False)
+    summary.columns = [f"{m}_{s}" for m, s in summary.columns]
+    summary = summary.reindex(MODEL_ORDER).reset_index()
+    print(summary.to_string(index=False))
+    summary.to_csv(f"{RESULTS_DIR}/rq1_model_performance.csv", index=False)
 
-    print("\nEVALUATION COMPLETE!")
-    print(f"User-level rows: {user_level_path}")
-    print(f"Results saved to {RESULTS_DIR}/")
+
+def report_significance(df: pd.DataFrame) -> None:
+
+    print_section("TABLE 2: STATISTICAL SIGNIFICANCE — Paired t-test on NDCG@10 (H1)")
+    print("  α = 0.05   |   Cohen's d = effect size")
+    print(
+        f"  {'Model A':<20} {'Model B':<20} {'N':>4} "
+        f"{'Mean A':>8} {'Mean B':>8} {'t':>8} {'p':>10} {'Cohen d':>9} {'Sig?':>5}"
+    )
+    print("  " + "-" * 95)
+
+    sig_rows = []
+    for model_a, model_b in combinations(MODEL_ORDER, 2):
+        paired = (
+            df[df["Model"].isin([model_a, model_b])]
+            .pivot(index="UserId", columns="Model", values="NDCG@10")
+            .dropna()
+        )
+
+        a_scores = paired[model_a].to_numpy(dtype=float)
+        b_scores = paired[model_b].to_numpy(dtype=float)
+        diff = a_scores - b_scores
+        n = len(paired)
+        mean_a = a_scores.mean()
+        mean_b = b_scores.mean()
+
+        t_stat = p_val = cohen_d = float("nan")
+        if n > 1 and diff.std(ddof=1) > 0:
+            t_stat, p_val = stats.ttest_rel(a_scores, b_scores)
+            cohen_d = diff.mean() / diff.std(ddof=1)
+
+        sig = "✓" if (not np.isnan(p_val) and p_val < 0.05) else "✗"
+        print(
+            f"  {model_a:<20} {model_b:<20} {n:>4} "
+            f"{mean_a:>8.4f} {mean_b:>8.4f} "
+            f"{t_stat:>8.3f} {p_val:>10.5f} {cohen_d:>9.3f} {sig:>5}"
+        )
+        sig_rows.append(
+            {
+                "Model_A": model_a,
+                "Model_B": model_b,
+                "N": n,
+                "Mean_A": round(mean_a, 4),
+                "Mean_B": round(mean_b, 4),
+                "t_statistic": round(t_stat, 4) if not np.isnan(t_stat) else "",
+                "p_value": round(p_val, 6) if not np.isnan(p_val) else "",
+                "Cohens_d": round(cohen_d, 4) if not np.isnan(cohen_d) else "",
+                "Significant_p<0.05": sig,
+            }
+        )
+
+    pd.DataFrame(sig_rows).to_csv(
+        f"{RESULTS_DIR}/rq1_significance_tests.csv", index=False
+    )
+
+
+def report_confidence_intervals(df: pd.DataFrame) -> None:
+
+    print_section("TABLE 3: 95% CONFIDENCE INTERVALS — NDCG@10")
+    ci_rows = []
+    for model in MODEL_ORDER:
+        scores = df[df["Model"] == model]["NDCG@10"].to_numpy(dtype=float)
+        mean = scores.mean()
+        if len(scores) > 1:
+            ci = stats.t.interval(
+                0.95, df=len(scores) - 1, loc=mean, scale=stats.sem(scores)
+            )
+            print(f"  {model:<22}: {mean:.4f}  95% CI [{ci[0]:.4f}, {ci[1]:.4f}]")
+            ci_rows.append(
+                {
+                    "Model": model,
+                    "Mean_NDCG@10": round(mean, 4),
+                    "CI_lower": round(ci[0], 4),
+                    "CI_upper": round(ci[1], 4),
+                }
+            )
+        else:
+            print(f"  {model:<22}: {mean:.4f}  95% CI [N/A]")
+            ci_rows.append({"Model": model, "Mean_NDCG@10": round(mean, 4)})
+    pd.DataFrame(ci_rows).to_csv(
+        f"{RESULTS_DIR}/rq1_confidence_intervals.csv", index=False
+    )
+
+
+def report_rq2_diversity(df: pd.DataFrame) -> None:
+
+    print_section("TABLE 4: DIVERSITY METRICS BY MODEL (RQ2)")
+    div = (
+        df.groupby("Model")[["Language_Diversity", "Genre_Diversity"]]
+        .mean()
+        .round(3)
+        .reindex(MODEL_ORDER)
+        .reset_index()
+    )
+    print(div.to_string(index=False))
+    div.to_csv(f"{RESULTS_DIR}/rq2_diversity_by_model.csv", index=False)
+
+
+def report_rq2_filter_bubble(df: pd.DataFrame) -> None:
+
+    print_section(
+        "TABLE 5: FILTER BUBBLE SCORE — Model × Archetype (RQ2 / H2)\n"
+        "  Higher = more preference-locked (stronger bubble effect)"
+    )
+    bubble = (
+        df.groupby(["Model", "Archetype"])["Filter_Bubble_Score"]
+        .mean()
+        .unstack("Archetype")
+        .round(3)
+        .reindex(MODEL_ORDER)
+    )
+    print(bubble.to_string())
+    bubble.reset_index().to_csv(
+        f"{RESULTS_DIR}/rq2_filter_bubble_by_archetype.csv", index=False
+    )
+    print(
+        "\n  Interpretation for Hypothesis 2:\n"
+        "  • Localized_Hybrid scoring highest → preference-reinforcing effect.\n"
+        "  • Compare Language_Diversity / Genre_Diversity across models (Table 4).\n"
+        "  • If diversity drops alongside bubble rise, H2 is supported."
+    )
+
+
+def report_fairness(df: pd.DataFrame) -> None:
+
+    print_section("TABLE 6: PERFORMANCE BY ARCHETYPE (Fairness / RQ2)")
+    arch_perf = (
+        df.groupby(["Archetype", "Model"])[["Precision@10", "NDCG@10"]]
+        .mean()
+        .round(4)
+        .reset_index()
+    )
+    print(arch_perf.to_string(index=False))
+    arch_perf.to_csv(f"{RESULTS_DIR}/rq2_performance_by_archetype.csv", index=False)
+
+    print("\n  Fairness Gap (max − min NDCG@10 across archetypes, per model):")
+    for model in MODEL_ORDER:
+        sub = arch_perf[arch_perf["Model"] == model]
+        gap = sub["NDCG@10"].max() - sub["NDCG@10"].min()
+        best = sub.loc[sub["NDCG@10"].idxmax(), "Archetype"]
+        worst = sub.loc[sub["NDCG@10"].idxmin(), "Archetype"]
+        print(f"  {model:<22}: gap={gap:.4f}  best={best}  worst={worst}")
+
+
+def main() -> None:
+    print(__doc__)
+    print_section("STARTING EVALUATION")
+
+    results_df = run_evaluation()
+    if results_df.empty:
+        print("No results generated. Check data alignment.")
+        return
+
+    user_path = f"{RESULTS_DIR}/evaluation_user_level.csv"
+    results_df.to_csv(user_path, index=False)
+    logger.info("User-level results saved → %s  (%d rows)", user_path, len(results_df))
+
+    report_rq1(results_df)
+    report_significance(results_df)
+    report_confidence_intervals(results_df)
+    report_rq2_diversity(results_df)
+    report_rq2_filter_bubble(results_df)
+    report_fairness(results_df)
+
+    print_section("EVALUATION COMPLETE")
+    print(f"  All CSV files written to: {RESULTS_DIR}/")
+    print("  Files produced:")
+    for f in sorted(os.listdir(RESULTS_DIR)):
+        if f.endswith(".csv"):
+            print(f"    • {f}")
 
 
 if __name__ == "__main__":

@@ -223,6 +223,21 @@ def build_unified_catalog() -> pd.DataFrame:
         ]
     ].copy()
 
+    before_tmdb = len(catalog)
+    has_tmdb = catalog["tmdbId"].notna()
+    catalog = pd.concat(
+        [
+            catalog[has_tmdb]
+            .sort_values(["vote_count", "vote_average"], ascending=[False, False])
+            .drop_duplicates(subset=["tmdbId"], keep="first"),
+            catalog[~has_tmdb],
+        ],
+        ignore_index=True,
+    )
+    logger.info(
+        "Removed %d duplicate tmdbId rows (post-join).", before_tmdb - len(catalog)
+    )
+
     before = len(catalog)
     duplicate_mask = catalog.duplicated(subset=["movieId"], keep=False)
     if duplicate_mask.any():

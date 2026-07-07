@@ -1,0 +1,5 @@
+Model,Language_Diversity,Genre_Diversity
+CF,2.0,10.075
+CBF,1.155,4.835
+NonLocal_Hybrid,1.165,4.765
+Localized_Hybrid,1.785,5.9
