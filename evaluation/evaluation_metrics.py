@@ -31,12 +31,21 @@ RESULTS_DIR = "results"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 K = 10
-MAX_EVAL_USERS = 200  # cap to keep runtime manageable
+# Evaluate the full synthetic cohort — all 398 users with ≥1 holdout positive.
+# Runtime is only ~15 s so there is no reason to subsample.
+MAX_EVAL_USERS = 400
 MIN_HOLDOUT_POS = 1  # minimum liked holdout items required
 HOLDOUT_RATING_THRESHOLD = 3.5
 RANDOM_SEED = 42
+# Per non-English preferred language, inject this many quality-ranked candidates
+# into the evaluation pool to ensure Bollywood / K-drama / Anime archetypes are
+# not systematically disadvantaged by the English-heavy popularity baseline.
+LANG_CANDIDATES_PER_LANG = 100
 
-MODEL_ORDER = ["CF", "CBF", "NonLocal_Hybrid", "Localized_Hybrid"]
+# Synthetic users (IDs ≥ 900,000) are outside the MovieLens SVD training set.
+# The model is relabelled MF_ColdStart to reflect the cold-start adaptation;
+# the hybrid weights (STANDARD_CF_W / LOCAL_*) remain as originally defined.
+MODEL_ORDER = ["MF_ColdStart", "CBF", "NonLocal_Hybrid", "Localized_Hybrid"]
 
 STANDARD_CF_W = 0.60
 STANDARD_CBF_W = 0.40
@@ -136,7 +145,7 @@ def load_all_artifacts() -> tuple:
 
 
 def _parse_pipe_list(s: str) -> list[str]:
-    return [x.strip() for x in str(s).split("|") if x.strip()]
+    return [x.strip() for x in s.split("|") if x.strip()]
 
 
 def build_holdout_split(
@@ -167,8 +176,20 @@ def build_candidate_set(
     cbf_matrix,
     movie_ids: np.ndarray,
     movies_df: pd.DataFrame,
+    quality_scores: np.ndarray | None = None,
+    pref_languages: list[str] | None = None,
 ) -> list[int]:
+    """Build the per-user evaluation candidate set.
 
+    Combines four sources:
+    1. Top-500 CBF-similar items (based on the user's training-set items).
+    2. Top-500 globally popular movies (by vote_count).
+    3. Holdout positives — injected so recall is always computable.
+    4. Language-aware expansion: top-LANG_CANDIDATES_PER_LANG movies per
+       non-English preferred language, ranked by Bayesian quality score.
+       This prevents Bollywood / K-drama / Anime archetypes from being
+       systematically under-served by the English-heavy popularity baseline.
+    """
     candidates: set[int] = set()
 
     valid_idxs = [movie_index[m] for m in train_ids if m in movie_index]
@@ -184,8 +205,96 @@ def build_candidate_set(
     candidates.update(pop_ids)
     candidates.update(holdout_pos)
 
+    # ── Language-aware expansion ─────────────────────────────────────────────
+    # For each non-English preferred language, inject the top-N movies ranked
+    # by pre-computed Bayesian quality score (or vote_count as fallback).
+    if pref_languages and "language" in movies_df.columns:
+        non_english = [lang for lang in pref_languages if lang != "English"]
+        for lang in non_english:
+            lang_rows = movies_df[movies_df["language"] == lang]
+            if lang_rows.empty:
+                continue
+            lang_mids = lang_rows["movieId"].astype(int).tolist()
+            if quality_scores is not None:
+                lang_quality = [
+                    (mid, float(quality_scores[movie_index[mid]]))
+                    for mid in lang_mids
+                    if mid in movie_index
+                ]
+                lang_quality.sort(key=lambda x: x[1], reverse=True)
+                top_lang = [mid for mid, _ in lang_quality[:LANG_CANDIDATES_PER_LANG]]
+            else:
+                top_lang = (
+                    lang_rows.nlargest(LANG_CANDIDATES_PER_LANG, "vote_count")["movieId"]
+                    .astype(int)
+                    .tolist()
+                )
+            candidates.update(top_lang)
+
     candidates -= set(train_ids)
     return list(candidates)
+
+
+def _cold_start_cf_scores(
+    svd,
+    train_ids: list[int],
+    candidates: list[int],
+) -> dict[int, float]:
+    """Cold-start Matrix Factorisation scores for a synthetic (unseen) user.
+
+    Synthetic user IDs (≥ 900,000) are outside the MovieLens SVD training set,
+    so the standard user-factor lookup (svd.predict) would silently fall back
+    to the global mean for every item, producing a constant scorer.
+
+    Instead, a pseudo-user factor vector p̂ is inferred by averaging the SVD
+    item factors (qi) of the user's liked training-set items:
+
+        p̂ = mean(qi  for  i  in  liked_train_items  known_to_SVD)
+
+    Each candidate is then scored as:
+
+        ĉf(i) = μ + bi + qi · p̂
+
+    where μ is the global mean and bi is the item bias.  The result is
+    min-max normalised to [0, 1] so it is directly comparable with the CBF
+    and localisation scores used in the hybrid models.
+
+    This is documented in the thesis as a *cold-start Matrix Factorisation
+    adaptation*, not as standard collaborative filtering.
+    """
+    trainset = svd.trainset
+    global_mean = float(trainset.global_mean)
+
+    # Accumulate item factors for training items known to the SVD
+    qi_liked: list[np.ndarray] = []
+    for mid in train_ids:
+        try:
+            inner_iid = trainset.to_inner_iid(mid)
+            qi_liked.append(svd.qi[inner_iid])
+        except ValueError:
+            pass  # movie not in SVD training set; skip
+
+    p_hat: np.ndarray = (
+        np.mean(qi_liked, axis=0) if qi_liked else np.zeros(svd.qi.shape[1])
+    )
+
+    # Score each candidate
+    raw: dict[int, float] = {}
+    for mid in candidates:
+        try:
+            inner_iid = trainset.to_inner_iid(mid)
+            raw[mid] = (
+                global_mean + svd.bi[inner_iid] + float(svd.qi[inner_iid] @ p_hat)
+            )
+        except ValueError:
+            raw[mid] = global_mean  # item unknown to SVD → global mean fallback
+
+    # Min-max normalise to [0, 1]
+    vals = np.array([raw[m] for m in candidates], dtype=np.float32)
+    lo, hi = vals.min(), vals.max()
+    if hi - lo > 1e-8:
+        vals = (vals - lo) / (hi - lo)
+    return {m: float(v) for m, v in zip(candidates, vals)}
 
 
 def compute_localization_score(
@@ -224,7 +333,7 @@ def compute_localization_score(
 
 
 def score_all_models(
-    uid: int,
+    uid: int,  # kept for API compatibility; not used for MF_ColdStart scoring
     train_ids: list[int],
     candidates: list[int],
     pref_genres: list[str],
@@ -239,6 +348,7 @@ def score_all_models(
 
     QUALITY_ALPHA = 0.15
 
+    # ── CBF scores ─────────────────────────────────────────────────────────
     valid_train_idxs = [movie_index[m] for m in train_ids if m in movie_index]
     if valid_train_idxs:
         from sklearn.metrics.pairwise import linear_kernel
@@ -252,6 +362,12 @@ def score_all_models(
     else:
         cbf_arr = quality_scores.copy()
 
+    # ── Cold-start MF scores ────────────────────────────────────────────────
+    # Replaces svd.predict(uid, mid) which silently returns the global mean for
+    # unseen synthetic users.  See _cold_start_cf_scores() for full details.
+    cf_norm = _cold_start_cf_scores(svd, train_ids, candidates)
+
+    # ── Localisation scores ─────────────────────────────────────────────────
     loc_scores = compute_localization_score(
         candidates, movie_index, clean_genres, language, pref_genres, pref_languages
     )
@@ -271,13 +387,11 @@ def score_all_models(
         if idx is None:
             continue
 
-        cf_pred = float(svd.predict(uid, mid).est) / 5.0
+        cf_pred = cf_norm.get(mid, 0.0)   # cold-start MF score, already [0, 1]
+        cbf_s   = float(cbf_arr[idx])
+        loc_s   = loc_norm.get(mid, 0.0)
 
-        cbf_s = float(cbf_arr[idx])
-
-        loc_s = loc_norm.get(mid, 0.0)
-
-        model_scores["CF"].append((mid, cf_pred))
+        model_scores["MF_ColdStart"].append((mid, cf_pred))
         model_scores["CBF"].append((mid, cbf_s))
         model_scores["NonLocal_Hybrid"].append(
             (mid, STANDARD_CF_W * cf_pred + STANDARD_CBF_W * cbf_s)
@@ -340,7 +454,19 @@ def filter_bubble_score(
     clean_genres: list[str],
     language: list[str],
 ) -> float:
+    """Fraction of top-K recommendations that are inside the user's preference bubble.
 
+    A recommendation is counted as *in-bubble* only when **both** conditions hold:
+      - the movie's language is in the user's preferred language set, AND
+      - at least one movie genre is in the user's preferred genre set.
+
+    Using AND logic (vs. the prior OR logic) prevents near-universal matches
+    when users have broad genre preferences, giving the metric meaningful
+    discriminative power across models.
+
+    The complement, Novelty@10 = 1 − Filter_Bubble_Score, is also reported
+    and measures the fraction of serendipitous / outside-preference recommendations.
+    """
     pref_lang_set = set(pref_languages)
     pref_genre_set = set(pref_genres)
     matches = 0
@@ -349,8 +475,9 @@ def filter_bubble_score(
         if idx is None:
             continue
         m_lang = language[idx]
-        m_genres = set(g for g in str(clean_genres[idx]).split("|") if g)
-        if m_lang in pref_lang_set or bool(m_genres & pref_genre_set):
+        m_genres = {g for g in str(clean_genres[idx]).split("|") if g}
+        # AND logic: both language AND at least one genre must match
+        if m_lang in pref_lang_set and bool(m_genres & pref_genre_set):
             matches += 1
     return matches / K
 
@@ -365,6 +492,12 @@ def compute_metrics(
     language: list[str],
 ) -> dict:
 
+    bubble = round(
+        filter_bubble_score(
+            top_k, pref_genres, pref_languages, movie_index, clean_genres, language
+        ),
+        4,
+    )
     return {
         # RQ1
         "Precision@10": round(precision_at_k(top_k, ground_truth), 4),
@@ -373,12 +506,11 @@ def compute_metrics(
         # RQ2
         "Language_Diversity": language_diversity(top_k, movie_index, language),
         "Genre_Diversity": genre_diversity(top_k, movie_index, clean_genres),
-        "Filter_Bubble_Score": round(
-            filter_bubble_score(
-                top_k, pref_genres, pref_languages, movie_index, clean_genres, language
-            ),
-            4,
-        ),
+        "Filter_Bubble_Score": bubble,
+        # Novelty@10: complement of Filter_Bubble_Score.
+        # Fraction of recommendations *outside* the user's preference bubble.
+        # Higher Novelty@10 → more serendipitous / diverse recommendations.
+        "Novelty@10": round(1.0 - bubble, 4),
     }
 
 
@@ -424,7 +556,14 @@ def run_evaluation() -> pd.DataFrame:
         archetype = str(profile.get("archetype", "unknown"))
 
         candidates = build_candidate_set(
-            train_ids, holdout_pos, movie_index, cbf_matrix, movie_ids, movies_df
+            train_ids,
+            holdout_pos,
+            movie_index,
+            cbf_matrix,
+            movie_ids,
+            movies_df,
+            quality_scores=quality_scores,
+            pref_languages=pref_languages,
         )
         if not candidates:
             logger.warning("uid=%d: empty candidate set, skipping.", uid)
@@ -581,9 +720,9 @@ def report_confidence_intervals(df: pd.DataFrame) -> None:
 
 def report_rq2_diversity(df: pd.DataFrame) -> None:
 
-    print_section("TABLE 4: DIVERSITY METRICS BY MODEL (RQ2)")
+    print_section("TABLE 4: DIVERSITY & NOVELTY METRICS BY MODEL (RQ2)")
     div = (
-        df.groupby("Model")[["Language_Diversity", "Genre_Diversity"]]
+        df.groupby("Model")[["Language_Diversity", "Genre_Diversity", "Novelty@10"]]
         .mean()
         .round(3)
         .reindex(MODEL_ORDER)

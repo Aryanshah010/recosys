@@ -19,10 +19,19 @@ RESULTS_DIR = Path("results")
 
 MODEL_NAMES = {"cf", "cbf", "hybrid", "localized"}
 MODEL_LABELS = {
-    "cf": "Collaborative Filtering",
+    "cf": "MF (Cold-start)",
     "cbf": "Content-Based Filtering",
     "hybrid": "Standard Hybrid",
     "localized": "Localized Hybrid",
+}
+
+# Map from prototype model keys → evaluation CSV model names (MODEL_ORDER labels)
+# evaluation_metrics.py uses these exact strings in the Model column.
+PROTO_TO_EVAL_MODEL: dict[str, str] = {
+    "cf": "MF_ColdStart",
+    "cbf": "CBF",
+    "hybrid": "NonLocal_Hybrid",
+    "localized": "Localized_Hybrid",
 }
 
 # evaluation_metrics.py may name these columns differently; add variants seen.
@@ -30,8 +39,10 @@ METRIC_COLUMN_ALIASES = {
     "precision_at_10": ["precision_at_10", "Precision@10", "precision@10"],
     "recall_at_10": ["recall_at_10", "Recall@10", "recall@10"],
     "ndcg_at_10": ["ndcg_at_10", "NDCG@10", "ndcg@10"],
+    "novelty_at_10": ["novelty_at_10", "Novelty@10", "novelty@10"],
+    "filter_bubble": ["Filter_Bubble_Score", "filter_bubble_score", "filter_bubble"],
 }
-USER_COL_ALIASES = ["userId", "user_id"]
+USER_COL_ALIASES = ["UserId", "userId", "user_id"]
 MODEL_COL_ALIASES = ["model", "model_name", "Model"]
 
 
@@ -91,7 +102,7 @@ class RecommenderService:
         liked = self._liked_movie_ids(user_id)
 
         if model == "cf":
-            scores = self.engine.get_cf_scores(user_id)
+            scores = self.engine.get_cf_scores(user_id, liked)
         elif model == "cbf":
             scores = self.engine.get_cbf_scores(liked)
         elif model == "hybrid":
@@ -123,7 +134,9 @@ class RecommenderService:
         if user_col is None or model_col is None:
             return None
 
-        row = df[(df[user_col] == user_id) & (df[model_col] == model)]
+        # Map prototype model key ("cf", "cbf", ...) to the evaluation CSV label
+        eval_model_name = PROTO_TO_EVAL_MODEL.get(model, model)
+        row = df[(df[user_col] == user_id) & (df[model_col] == eval_model_name)]
         if row.empty:
             return None
         r = row.iloc[0]

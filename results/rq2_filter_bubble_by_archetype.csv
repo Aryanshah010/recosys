@@ -1,5 +1,5 @@
 Model,anime,bollywood,hollywood,kdrama,mixed
-CF,1.0,1.0,0.951,1.0,1.0
-CBF,1.0,1.0,1.0,1.0,1.0
-NonLocal_Hybrid,1.0,1.0,1.0,1.0,1.0
-Localized_Hybrid,1.0,1.0,1.0,1.0,1.0
+MF_ColdStart,0.624,0.647,0.624,0.631,0.541
+CBF,0.832,0.252,0.761,0.284,0.509
+NonLocal_Hybrid,0.8,0.392,0.795,0.415,0.545
+Localized_Hybrid,0.978,0.948,0.997,0.951,0.982

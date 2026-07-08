@@ -17,10 +17,10 @@
     <div class="model-col {% if col.key == 'localized' %}localized{% endif %}">
       <div class="model-title">{{ col.label }}</div>
       <div class="model-sub">
-        {% if col.key == 'cf' %}Model 1 · Baseline
-        {% elif col.key == 'cbf' %}Model 2 · Baseline
-        {% elif col.key == 'hybrid' %}Model 3 · 0.60 CF + 0.40 CBF
-        {% else %}Model 4 · Proposed · 0.45 CF + 0.35 CBF + 0.20 Localization{% endif %}
+        {% if col.key == 'cf' %}Model 1 · MF Cold-start Baseline
+        {% elif col.key == 'cbf' %}Model 2 · Content-Based Baseline
+        {% elif col.key == 'hybrid' %}Model 3 · 0.60 MF + 0.40 CBF
+        {% else %}Model 4 · Proposed · 0.45 MF + 0.35 CBF + 0.20 Localization{% endif %}
       </div>
 
       {% for r in col.recs %}
@@ -36,6 +36,12 @@
         <span>P@10 <b>{{ col.metrics.precision_at_10 }}</b></span>
         <span>R@10 <b>{{ col.metrics.recall_at_10 }}</b></span>
         <span>NDCG@10 <b>{{ col.metrics.ndcg_at_10 }}</b></span>
+        {% if col.metrics.novelty_at_10 is not none %}
+        <span>Novelty <b>{{ col.metrics.novelty_at_10 }}</b></span>
+        {% endif %}
+        {% if col.metrics.filter_bubble is not none %}
+        <span>Bubble <b>{{ col.metrics.filter_bubble }}</b></span>
+        {% endif %}
       </div>
       {% endif %}
     </div>

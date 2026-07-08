@@ -95,27 +95,44 @@ class HybridRecommender:
                 continue
         return inner
 
-    def get_cf_scores(self, user_id: int) -> np.ndarray:
+    def get_cf_scores(self, user_id: int, liked_movie_ids: list[int] | None = None) -> np.ndarray:
 
         trainset = self.cf_algo.trainset
         global_mean = trainset.global_mean
         scores = np.full(self.n_movies, global_mean, dtype=np.float32)
 
-        try:
-            inner_uid = trainset.to_inner_uid(int(user_id))
-        except ValueError:
-            return scores
-
-        bu = self.cf_algo.bu[inner_uid]
-        pu = self.cf_algo.pu[inner_uid]
-
         valid_mask = self._inner_iid_map >= 0
         valid_inner_iids = self._inner_iid_map[valid_mask]
-        bi = self.cf_algo.bi[valid_inner_iids]
-        qi = self.cf_algo.qi[valid_inner_iids]
 
-        scores[valid_mask] = global_mean + bu + bi + qi @ pu
-        return scores.astype(np.float32)
+        try:
+            inner_uid = trainset.to_inner_uid(user_id)
+            bu = self.cf_algo.bu[inner_uid]
+            pu = self.cf_algo.pu[inner_uid]
+            bi = self.cf_algo.bi[valid_inner_iids]
+            qi = self.cf_algo.qi[valid_inner_iids]
+            scores[valid_mask] = global_mean + bu + bi + qi @ pu
+            return scores.astype(np.float32)
+        except ValueError:
+            if not liked_movie_ids:
+                return scores
+            
+            bi = self.cf_algo.bi[valid_inner_iids]
+            qi = self.cf_algo.qi[valid_inner_iids]
+            
+            train_inner_iids = []
+            for mid in liked_movie_ids:
+                try:
+                    train_inner_iids.append(trainset.to_inner_iid(mid))
+                except ValueError:
+                    pass
+            
+            if not train_inner_iids:
+                p_hat = np.zeros(qi.shape[1], dtype=np.float32)
+            else:
+                p_hat = self.cf_algo.qi[train_inner_iids].mean(axis=0)
+                
+            scores[valid_mask] = global_mean + bi + qi @ p_hat
+            return scores.astype(np.float32)
 
     def get_cbf_scores(self, liked_movie_ids: list[int]) -> np.ndarray:
         return self.cbf.get_content_scores(liked_movie_ids)
@@ -141,7 +158,7 @@ class HybridRecommender:
     ) -> np.ndarray:
 
         w = STANDARD_HYBRID_WEIGHTS
-        cf = min_max_normalize(self.get_cf_scores(user_id))
+        cf = min_max_normalize(self.get_cf_scores(user_id, liked_movie_ids))
         cbf = min_max_normalize(self.get_cbf_scores(liked_movie_ids))
         return w.cf * cf + w.cbf * cbf
 
@@ -153,7 +170,7 @@ class HybridRecommender:
     ) -> np.ndarray:
 
         w = LOCALIZED_HYBRID_WEIGHTS
-        cf = min_max_normalize(self.get_cf_scores(user_id))
+        cf = min_max_normalize(self.get_cf_scores(user_id, liked_movie_ids))
         cbf = min_max_normalize(self.get_cbf_scores(liked_movie_ids))
         loc = self.get_localization_scores(profile)
         return w.cf * cf + w.cbf * cbf + w.localization * loc

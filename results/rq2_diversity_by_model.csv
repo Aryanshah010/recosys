@@ -1,5 +1,5 @@
-Model,Language_Diversity,Genre_Diversity
-CF,2.16,12.15
-CBF,3.67,7.455
-NonLocal_Hybrid,4.17,8.365
-Localized_Hybrid,1.67,7.675
+Model,Language_Diversity,Genre_Diversity,Novelty@10
+MF_ColdStart,3.236,9.957,0.38
+CBF,3.673,7.435,0.418
+NonLocal_Hybrid,3.869,9.269,0.364
+Localized_Hybrid,1.46,8.023,0.025
