@@ -1,5 +1,5 @@
 Model,anime,bollywood,hollywood,kdrama,mixed
-CF,0.984,1.0,0.958,1.0,1.0
-CBF,0.953,1.0,1.0,1.0,0.97
-NonLocal_Hybrid,0.916,1.0,1.0,1.0,0.95
+CF,1.0,1.0,0.951,1.0,1.0
+CBF,1.0,1.0,1.0,1.0,1.0
+NonLocal_Hybrid,1.0,1.0,1.0,1.0,1.0
 Localized_Hybrid,1.0,1.0,1.0,1.0,1.0

@@ -25,6 +25,13 @@ MIN_USER_ACTIVITY = 20
 MIN_MOVIE_POPULARITY = 20
 RATINGS_CHUNK_SIZE = 5_000_000
 
+MIN_CATALOG_RELEASE_YEAR = 1965
+
+LANGUAGE_VOTE_FLOOR: dict[str, int] = {
+    "English": 25,
+}
+DEFAULT_VOTE_FLOOR = 5
+
 REQUIRED_MOVIE_COLUMNS = [
     "movieId",
     "tmdbId",
@@ -124,6 +131,13 @@ def load_tmdb_metadata() -> pd.DataFrame:
     tmdb["vote_average"] = pd.to_numeric(tmdb["vote_average"], errors="coerce")
     tmdb["vote_count"] = pd.to_numeric(tmdb["vote_count"], errors="coerce")
     tmdb["popularity"] = pd.to_numeric(tmdb["popularity"], errors="coerce")
+    tmdb["adult"] = tmdb["adult"].astype(str).str.lower().eq("true")
+
+    before_adult = len(tmdb)
+    tmdb = tmdb[~tmdb["adult"]]
+    logger.info(
+        "Removed %d adult-flagged titles from TMDB metadata.", before_adult - len(tmdb)
+    )
 
     logger.info("Loaded %d TMDB records with valid tmdbId.", len(tmdb))
 
@@ -162,7 +176,12 @@ def build_unified_catalog() -> pd.DataFrame:
         ]
     ].copy()
 
-    catalog = pd.merge(ml_with_links, tmdb_subset, on="tmdbId", how="left")
+    catalog = pd.merge(ml_with_links, tmdb_subset, on="tmdbId", how="inner")
+    logger.info(
+        "Inner-joined on tmdbId: %d movies retained (movies without a valid "
+        "TMDB match are dropped rather than defaulted to 'Unknown' language).",
+        len(catalog),
+    )
 
     catalog["ml_genre_list"] = (
         catalog["genres_x"].apply(normalize_ml_genres)
@@ -206,6 +225,24 @@ def build_unified_catalog() -> pd.DataFrame:
     catalog["popularity"] = catalog["popularity"].fillna(0.0)
     catalog["movieId"] = catalog["movieId"].astype("Int64")
     catalog["tmdbId"] = catalog["tmdbId"].astype("Int64")
+
+    before_floor = len(catalog)
+    vote_floor = catalog["language"].map(
+        lambda lang: LANGUAGE_VOTE_FLOOR.get(lang, DEFAULT_VOTE_FLOOR)  # type: ignore
+    )
+    catalog = catalog[
+        (catalog["vote_count"] >= vote_floor)
+        & (catalog["release_year"].fillna(0) >= MIN_CATALOG_RELEASE_YEAR)
+    ]
+    logger.info(
+        "Applied per-language vote_count floor (English>=%d, other>=%d) and "
+        "release_year>=%d: %d -> %d movies.",
+        LANGUAGE_VOTE_FLOOR["English"],
+        DEFAULT_VOTE_FLOOR,
+        MIN_CATALOG_RELEASE_YEAR,
+        before_floor,
+        len(catalog),
+    )
 
     catalog = catalog[
         [
@@ -251,6 +288,15 @@ def build_unified_catalog() -> pd.DataFrame:
     logger.info("Removed %d duplicate movieId rows.", before - len(catalog))
 
     logger.info("Unified catalog built with %d movies.", len(catalog))
+
+    anime_check = catalog[
+        catalog["clean_genres"].str.contains("Animation", na=False)
+        & (catalog["language"] == "Japanese")
+    ]
+    logger.info(
+        "Sanity check — Animation+Japanese titles available: %d", len(anime_check)
+    )
+
     return catalog
 
 
