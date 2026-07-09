@@ -158,7 +158,7 @@ ARCHETYPES: list[Archetype] = [
         "name": "mixed",
         "prob": 0.10,
         "primary_language": None,
-        "secondary_languages": ["English", "Hindi", "Japanese", "Korean"],
+        "secondary_languages": ["English", "Hindi", "Japanese", "Korean", "Nepali"],
         "secondary_language_prob": 0.50,
         "preferred_pool_genres": [
             "Action",
@@ -280,7 +280,10 @@ def build_user_languages(archetype: Archetype, rng: np.random.Generator) -> list
         return langs
 
     pool = archetype["secondary_languages"]
-    n = int(rng.integers(2, min(5, len(pool) + 1)))
+    # For mixed archetype, pick 1 or 2 random preferred languages so their
+    # 'preference bubble' isn't huge, making their diverse watching habits
+    # accurately reflect low language alignment.
+    n = int(rng.integers(1, 3))
     return rng.choice(pool, size=n, replace=False).tolist()
 
 
@@ -477,9 +480,14 @@ def generate_ratings(
 
         lang_score = compute_language_preference_scores(movie_language, pref_langs)
 
+        # Mixed archetype represents users without strong cultural/language boundaries.
+        # Zeroing out the language coefficient ensures their ratings are driven solely
+        # by genres, making their ground-truth holdout set culturally diverse.
+        user_lang_coef = LANGUAGE_SCORE_COEF if archetype["name"] != "mixed" else 0.0
+
         base_score = (
             GENRE_SCORE_COEF * genre_score
-            + LANGUAGE_SCORE_COEF * lang_score
+            + user_lang_coef * lang_score
             + POPULARITY_SCORE_COEF * popularity_norm
         )
 

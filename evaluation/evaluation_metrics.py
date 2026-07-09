@@ -150,11 +150,20 @@ def _parse_pipe_list(s: str) -> list[str]:
 
 def build_holdout_split(
     ratings_df: pd.DataFrame,
-) -> dict[int, tuple[list[int], list[int]]]:
+) -> dict[int, tuple[list[int], list[int], list[int]]]:
 
-    splits: dict[int, tuple[list[int], list[int]]] = {}
+    splits: dict[int, tuple[list[int], list[int], list[int]]] = {}
     for uid, grp in ratings_df.groupby("userId"):
         train_ids = grp.loc[grp["split"] == "train", "movieId"].astype(int).tolist()
+        train_pos = (
+            grp.loc[
+                (grp["split"] == "train")
+                & (grp["rating"] >= HOLDOUT_RATING_THRESHOLD),
+                "movieId",
+            ]
+            .astype(int)
+            .tolist()
+        )
         holdout_pos = (
             grp.loc[
                 (grp["split"] == "holdout")
@@ -165,7 +174,7 @@ def build_holdout_split(
             .tolist()
         )
         if len(holdout_pos) >= MIN_HOLDOUT_POS:
-            splits[int(uid)] = (train_ids, holdout_pos)  # type: ignore
+            splits[int(uid)] = (train_ids, train_pos, holdout_pos)  # type: ignore
     return splits
 
 
@@ -237,7 +246,7 @@ def build_candidate_set(
 
 def _cold_start_cf_scores(
     svd,
-    train_ids: list[int],
+    train_pos: list[int],
     candidates: list[int],
 ) -> dict[int, float]:
     """Cold-start Matrix Factorisation scores for a synthetic (unseen) user.
@@ -267,7 +276,7 @@ def _cold_start_cf_scores(
 
     # Accumulate item factors for training items known to the SVD
     qi_liked: list[np.ndarray] = []
-    for mid in train_ids:
+    for mid in train_pos:
         try:
             inner_iid = trainset.to_inner_iid(mid)
             qi_liked.append(svd.qi[inner_iid])
@@ -334,7 +343,7 @@ def compute_localization_score(
 
 def score_all_models(
     uid: int,  # kept for API compatibility; not used for MF_ColdStart scoring
-    train_ids: list[int],
+    train_pos: list[int],
     candidates: list[int],
     pref_genres: list[str],
     pref_languages: list[str],
@@ -349,7 +358,7 @@ def score_all_models(
     QUALITY_ALPHA = 0.15
 
     # ── CBF scores ─────────────────────────────────────────────────────────
-    valid_train_idxs = [movie_index[m] for m in train_ids if m in movie_index]
+    valid_train_idxs = [movie_index[m] for m in train_pos if m in movie_index]
     if valid_train_idxs:
         from sklearn.metrics.pairwise import linear_kernel
 
@@ -365,7 +374,7 @@ def score_all_models(
     # ── Cold-start MF scores ────────────────────────────────────────────────
     # Replaces svd.predict(uid, mid) which silently returns the global mean for
     # unseen synthetic users.  See _cold_start_cf_scores() for full details.
-    cf_norm = _cold_start_cf_scores(svd, train_ids, candidates)
+    cf_norm = _cold_start_cf_scores(svd, train_pos, candidates)
 
     # ── Localisation scores ─────────────────────────────────────────────────
     loc_scores = compute_localization_score(
@@ -549,7 +558,7 @@ def run_evaluation() -> pd.DataFrame:
         if (i + 1) % 50 == 0:
             logger.info("  … %d / %d users done", i + 1, len(eval_uids))
 
-        train_ids, holdout_pos = splits[uid]
+        train_ids, train_pos, holdout_pos = splits[uid]
         profile = user_profile.get(uid, {})
         pref_genres = _parse_pipe_list(profile.get("preferred_genres", ""))
         pref_languages = _parse_pipe_list(profile.get("preferred_language", ""))
@@ -571,7 +580,7 @@ def run_evaluation() -> pd.DataFrame:
 
         model_scores = score_all_models(
             uid,
-            train_ids,
+            train_pos,
             candidates,
             pref_genres,
             pref_languages,

@@ -1,5 +1,5 @@
 Model,Mean_NDCG@10,CI_lower,CI_upper
-MF_ColdStart,0.0102,0.0054,0.0149
-CBF,0.0196,0.0135,0.0257
-NonLocal_Hybrid,0.0191,0.0127,0.0255
-Localized_Hybrid,0.0234,0.0163,0.0306
+MF_ColdStart,0.0103,0.0048,0.0158
+CBF,0.019,0.0128,0.0251
+NonLocal_Hybrid,0.0201,0.0133,0.0269
+Localized_Hybrid,0.0276,0.0198,0.0354
