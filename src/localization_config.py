@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -80,17 +81,17 @@ def _assert_weight_tables_match_canonical() -> None:
 _assert_weight_tables_match_canonical()
 
 
-def build_genre_onehot_from_list(clean_genres: list[str]) -> np.ndarray:
+def build_genre_onehot_from_list(clean_genres: list[str]) -> np.ndarray[Any, Any]:
     onehot = np.zeros((len(clean_genres), len(CANONICAL_GENRES)), dtype=np.float32)
     for row_idx, genre_str in enumerate(clean_genres):
-        for g in str(genre_str).split("|"):
+        for g in genre_str.split("|"):
             col = GENRE_INDEX.get(g)
             if col is not None:
                 onehot[row_idx, col] = 1.0
     return onehot
 
 
-def build_genre_weight_vector(preferred_genres: list[str]) -> np.ndarray:
+def build_genre_weight_vector(preferred_genres: list[str]) -> np.ndarray[Any, Any]:
     return np.array(
         [
             GENRE_LOCALIZATION_WEIGHT[g] if g in preferred_genres else 0.0
@@ -101,8 +102,8 @@ def build_genre_weight_vector(preferred_genres: list[str]) -> np.ndarray:
 
 
 def compute_language_preference_scores(
-    movie_language: np.ndarray, preferred_langs: set[str]
-) -> np.ndarray:
+    movie_language: np.ndarray[Any, Any], preferred_langs: set[str]
+) -> np.ndarray[Any, Any]:
     return np.array(
         [
             LANGUAGE_LOCALIZATION_WEIGHT.get(lang, 0.0)

@@ -1,7 +1,7 @@
 Model_A,Model_B,N,Mean_A,Mean_B,t_statistic,p_value,Cohens_d,Significant_p<0.05
-MF_ColdStart,CBF,398,0.005,0.0107,-1.8758,0.061416,-0.094,✗
-MF_ColdStart,NonLocal_Hybrid,398,0.005,0.0076,-1.1483,0.251524,-0.0576,✗
-MF_ColdStart,Localized_Hybrid,398,0.005,0.009,-1.5372,0.125045,-0.0771,✗
-CBF,NonLocal_Hybrid,398,0.0107,0.0076,1.0985,0.272662,0.0551,✗
-CBF,Localized_Hybrid,398,0.0107,0.009,0.5494,0.583014,0.0275,✗
-NonLocal_Hybrid,Localized_Hybrid,398,0.0076,0.009,-1.1961,0.232368,-0.06,✗
+MF_ColdStart,CBF,388,0.0102,0.0196,-2.3932,0.017177,-0.1215,✓
+MF_ColdStart,NonLocal_Hybrid,388,0.0102,0.0191,-3.4178,0.000698,-0.1735,✓
+MF_ColdStart,Localized_Hybrid,388,0.0102,0.0234,-4.5699,7e-06,-0.232,✓
+CBF,NonLocal_Hybrid,388,0.0196,0.0191,0.1276,0.898517,0.0065,✗
+CBF,Localized_Hybrid,388,0.0196,0.0234,-0.8973,0.370133,-0.0456,✗
+NonLocal_Hybrid,Localized_Hybrid,388,0.0191,0.0234,-2.7341,0.006542,-0.1388,✓

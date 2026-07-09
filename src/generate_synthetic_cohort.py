@@ -45,13 +45,34 @@ TRAIN_SPLIT_RATIO = 0.8
 RATING_NOISE_STD = 0.5
 RANDOM_STATE = 42
 
+GENRE_SCORE_COEF = 0.5
+LANGUAGE_SCORE_COEF = 0.3
+POPULARITY_SCORE_COEF = 0.1
+GUMBEL_TEMPERATURE = 0.3
+GENRE_WEIGHT_JITTER = 0.15
+
+REQUIRED_MOVIE_COLUMNS = [
+    "movieId",
+    "clean_genres",
+    "language",
+    "vote_count",
+    "vote_average",
+    "release_year",
+]
+
+ARCHETYPE_BY_NAME: dict[str, "Archetype"] = {}
+
 
 class Archetype(TypedDict):
     name: str
     prob: float
-    core_languages: list[str]
-    optional_languages: list[str]
-    optional_language_prob: float
+    primary_language: str | None
+    secondary_languages: list[str]
+    secondary_language_prob: float
+    preferred_pool_genres: list[str]
+    preferred_pool_ratio: float
+    preferred_pool_ratio_jitter: tuple[float, float]
+    require_animation: bool
     core_genres: list[str]
     optional_genres: list[str]
     n_optional_genres: tuple[int, int]
@@ -61,9 +82,20 @@ ARCHETYPES: list[Archetype] = [
     {
         "name": "hollywood",
         "prob": 0.35,
-        "core_languages": ["English"],
-        "optional_languages": ["Hindi"],
-        "optional_language_prob": 0.25,
+        "primary_language": "English",
+        "secondary_languages": ["Hindi"],
+        "secondary_language_prob": 0.25,
+        "preferred_pool_genres": [
+            "Action",
+            "Sci-Fi",
+            "Adventure",
+            "Thriller",
+            "Comedy",
+            "Drama",
+        ],
+        "preferred_pool_ratio": 0.90,
+        "preferred_pool_ratio_jitter": (0.85, 0.95),
+        "require_animation": False,
         "core_genres": ["Action", "Sci-Fi"],
         "optional_genres": ["Adventure", "Crime", "Thriller", "Comedy"],
         "n_optional_genres": (1, 2),
@@ -71,9 +103,19 @@ ARCHETYPES: list[Archetype] = [
     {
         "name": "anime",
         "prob": 0.20,
-        "core_languages": ["English", "Japanese"],
-        "optional_languages": ["Korean"],
-        "optional_language_prob": 0.20,
+        "primary_language": "Japanese",
+        "secondary_languages": ["English", "Korean"],
+        "secondary_language_prob": 0.20,
+        "preferred_pool_genres": [
+            "Animation",
+            "Fantasy",
+            "Adventure",
+            "Action",
+            "Sci-Fi",
+        ],
+        "preferred_pool_ratio": 0.80,
+        "preferred_pool_ratio_jitter": (0.70, 0.90),
+        "require_animation": True,
         "core_genres": ["Animation", "Fantasy"],
         "optional_genres": ["Action", "Sci-Fi", "Adventure", "Comedy"],
         "n_optional_genres": (1, 2),
@@ -81,9 +123,19 @@ ARCHETYPES: list[Archetype] = [
     {
         "name": "bollywood",
         "prob": 0.20,
-        "core_languages": ["English", "Hindi"],
-        "optional_languages": ["Nepali"],
-        "optional_language_prob": 0.30,
+        "primary_language": "Hindi",
+        "secondary_languages": ["English", "Nepali"],
+        "secondary_language_prob": 0.30,
+        "preferred_pool_genres": [
+            "Drama",
+            "Romance",
+            "Comedy",
+            "Action",
+            "Family",
+        ],
+        "preferred_pool_ratio": 0.80,
+        "preferred_pool_ratio_jitter": (0.70, 0.90),
+        "require_animation": False,
         "core_genres": ["Drama", "Comedy"],
         "optional_genres": ["Action", "Romance", "Thriller"],
         "n_optional_genres": (1, 2),
@@ -91,9 +143,13 @@ ARCHETYPES: list[Archetype] = [
     {
         "name": "kdrama",
         "prob": 0.15,
-        "core_languages": ["English", "Korean"],
-        "optional_languages": ["Japanese"],
-        "optional_language_prob": 0.15,
+        "primary_language": "Korean",
+        "secondary_languages": ["English", "Japanese"],
+        "secondary_language_prob": 0.15,
+        "preferred_pool_genres": ["Drama", "Romance", "Mystery", "Thriller"],
+        "preferred_pool_ratio": 0.80,
+        "preferred_pool_ratio_jitter": (0.70, 0.90),
+        "require_animation": False,
         "core_genres": ["Drama", "Romance"],
         "optional_genres": ["Mystery", "Thriller", "Comedy"],
         "n_optional_genres": (1, 2),
@@ -101,21 +157,26 @@ ARCHETYPES: list[Archetype] = [
     {
         "name": "mixed",
         "prob": 0.10,
-        "core_languages": ["English", "Hindi"],
-        "optional_languages": ["Nepali", "Japanese"],
-        "optional_language_prob": 0.20,
+        "primary_language": None,
+        "secondary_languages": ["English", "Hindi", "Japanese", "Korean"],
+        "secondary_language_prob": 0.50,
+        "preferred_pool_genres": [
+            "Action",
+            "Comedy",
+            "Drama",
+            "Adventure",
+            "Thriller",
+        ],
+        "preferred_pool_ratio": 0.40,
+        "preferred_pool_ratio_jitter": (0.35, 0.45),
+        "require_animation": False,
         "core_genres": ["Action", "Comedy"],
         "optional_genres": ["Drama", "Adventure", "Thriller"],
         "n_optional_genres": (1, 2),
     },
 ]
 
-GENRE_SCORE_COEF = 0.5
-LANGUAGE_SCORE_COEF = 0.3
-POPULARITY_SCORE_COEF = 0.1
-GUMBEL_TEMPERATURE = 0.3
-
-REQUIRED_MOVIE_COLUMNS = ["movieId", "clean_genres", "language", "vote_count"]
+ARCHETYPE_BY_NAME = {a["name"]: a for a in ARCHETYPES}
 
 
 def _assert_archetypes_valid() -> None:
@@ -127,8 +188,14 @@ def _assert_archetypes_valid() -> None:
         raise ValueError(f"ARCHETYPES probabilities must sum to 1.0, got {prob_sum}")
 
     for a in ARCHETYPES:
-        used_genres = set(a["core_genres"]) | set(a["optional_genres"])
-        used_langs = set(a["core_languages"]) | set(a["optional_languages"])
+        used_genres = (
+            set(a["core_genres"])
+            | set(a["optional_genres"])
+            | set(a["preferred_pool_genres"])
+        )
+        used_langs = set(a["secondary_languages"])
+        if a["primary_language"]:
+            used_langs.add(a["primary_language"])
         bad_g = used_genres - genre_keys
         bad_l = used_langs - lang_keys
         if bad_g or bad_l:
@@ -159,12 +226,62 @@ def load_movies_final(path: str = MOVIES_FINAL_PATH) -> pd.DataFrame:
     return movies_df
 
 
+def _movie_has_genre(genre_str: str, genres: set[str]) -> bool:
+    return bool(set(genre_str.split("|")) & genres)
+
+
+def build_archetype_pools(
+    movies_df: pd.DataFrame,
+    archetype: Archetype,
+) -> tuple[np.ndarray, np.ndarray]:
+    languages = movies_df["language"].fillna("").to_numpy()
+    genre_strs = movies_df["clean_genres"].fillna("").tolist()
+    n = len(movies_df)
+    all_idx = np.arange(n, dtype=np.int64)
+    preferred_genres = set(archetype["preferred_pool_genres"])
+
+    secondary_langs = set(archetype["secondary_languages"])
+    secondary_mask = np.array(
+        [lang in secondary_langs for lang in languages],
+        dtype=bool,
+    )
+
+    if archetype["primary_language"] is None:
+        preferred_mask = np.array(
+            [_movie_has_genre(g, preferred_genres) for g in genre_strs],
+            dtype=bool,
+        )
+    else:
+        primary = archetype["primary_language"]
+        preferred_mask = np.array(
+            [
+                lang == primary
+                and _movie_has_genre(g, preferred_genres)
+                and (
+                    not archetype["require_animation"]
+                    or "Animation" in str(g).split("|")
+                )
+                for lang, g in zip(languages, genre_strs)
+            ],
+            dtype=bool,
+        )
+
+    preferred_idx = all_idx[preferred_mask]
+    global_idx = all_idx[~preferred_mask & secondary_mask]
+    return preferred_idx, global_idx
+
+
 def build_user_languages(archetype: Archetype, rng: np.random.Generator) -> list[str]:
-    langs = list(archetype["core_languages"])
-    for lang in archetype["optional_languages"]:
-        if rng.random() < archetype["optional_language_prob"]:
-            langs.append(lang)
-    return langs
+    if archetype["primary_language"]:
+        langs = [archetype["primary_language"]]
+        for lang in archetype["secondary_languages"]:
+            if rng.random() < archetype["secondary_language_prob"]:
+                langs.append(lang)
+        return langs
+
+    pool = archetype["secondary_languages"]
+    n = int(rng.integers(2, min(5, len(pool) + 1)))
+    return rng.choice(pool, size=n, replace=False).tolist()
 
 
 def build_user_genres(archetype: Archetype, rng: np.random.Generator) -> list[str]:
@@ -177,6 +294,77 @@ def build_user_genres(archetype: Archetype, rng: np.random.Generator) -> list[st
         picked = rng.choice(pool, size=n_optional, replace=False)
         genres.extend(picked.tolist())
     return genres
+
+
+def build_jittered_genre_vector(
+    pref_genres: list[str],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    vec = build_genre_weight_vector(pref_genres).copy()
+    for i in range(len(vec)):
+        if vec[i] > 0:
+            vec[i] *= rng.uniform(1.0 - GENRE_WEIGHT_JITTER, 1.0 + GENRE_WEIGHT_JITTER)
+    return vec
+
+
+def sample_candidate_indices(
+    preferred_idx: np.ndarray,
+    global_idx: np.ndarray,
+    k: int,
+    preferred_ratio: float,
+    rng: np.random.Generator,
+    weights: np.ndarray | None = None,
+) -> np.ndarray:
+    n_preferred = round(k * preferred_ratio)
+    n_global = k - n_preferred
+
+    n_preferred = min(n_preferred, len(preferred_idx))
+    n_global = min(n_global, len(global_idx))
+
+    selected: list[np.ndarray] = []
+    used: set[int] = set()
+
+    def _sample(pool_idx: np.ndarray, n: int) -> np.ndarray:
+        if weights is not None:
+            p = weights[pool_idx]
+            if p.sum() > 0:
+                p = p / p.sum()
+            else:
+                p = None
+        else:
+            p = None
+        return rng.choice(pool_idx, size=n, replace=False, p=p)
+
+    if n_preferred > 0 and len(preferred_idx) > 0:
+        pref_pick = _sample(preferred_idx, n_preferred)
+        selected.append(pref_pick)
+        used.update(pref_pick.tolist())
+
+    if n_global > 0 and len(global_idx) > 0:
+        available_global = global_idx[~np.isin(global_idx, list(used))]
+        n_global = min(n_global, len(available_global))
+        if n_global > 0:
+            glob_pick = _sample(available_global, n_global)
+            selected.append(glob_pick)
+            used.update(glob_pick.tolist())
+
+    if not selected:
+        fallback = np.concatenate([preferred_idx, global_idx])
+        if len(fallback) == 0:
+            raise ValueError("No candidate movies available for sampling.")
+        pick_size = min(k, len(fallback))
+        return _sample(fallback, pick_size)
+
+    candidate_idx = np.concatenate(selected)
+    shortfall = k - len(candidate_idx)
+    if shortfall > 0:
+        remaining = np.concatenate([preferred_idx, global_idx])
+        remaining = remaining[~np.isin(remaining, list(used))]
+        if len(remaining) > 0:
+            extra = _sample(remaining, min(shortfall, len(remaining)))
+            candidate_idx = np.concatenate([candidate_idx, extra])
+
+    return candidate_idx
 
 
 def generate_user_profiles(n_users: int, rng: np.random.Generator) -> pd.DataFrame:
@@ -211,44 +399,97 @@ def build_popularity_norm(movies_df: pd.DataFrame) -> np.ndarray:
     return (log_vc / max_log_vc).astype(np.float32)
 
 
+def build_bayesian_popularity(movies_df: pd.DataFrame) -> np.ndarray:
+    v = (
+        pd.to_numeric(movies_df["vote_count"], errors="coerce")
+        .fillna(0.0)
+        .to_numpy(dtype=np.float64)
+    )
+    R = (
+        pd.to_numeric(movies_df["vote_average"], errors="coerce")
+        .fillna(5.0)
+        .to_numpy(dtype=np.float64)
+    )
+    C = R.mean()
+    m = np.percentile(v[v > 0], 50) if np.any(v > 0) else 1.0
+    bayes = (v / (v + m)) * R + (m / (v + m)) * C
+    return bayes.astype(np.float32)
+
+
+def build_recency_score(movies_df: pd.DataFrame) -> np.ndarray:
+    years = (
+        pd.to_numeric(movies_df["release_year"], errors="coerce")
+        .fillna(2000)
+        .to_numpy()
+    )
+    max_year = years.max()
+    decay = np.exp(-0.05 * (max_year - years))
+    return decay.astype(np.float32)
+
+
 def generate_ratings(
     users_df: pd.DataFrame,
     movies_df: pd.DataFrame,
     rng: np.random.Generator,
 ) -> pd.DataFrame:
-
     movie_ids = movies_df["movieId"].to_numpy()
     movie_language = movies_df["language"].fillna("").to_numpy()
     genre_onehot = build_genre_onehot_from_list(
         movies_df["clean_genres"].fillna("").tolist()
     )
     popularity_norm = build_popularity_norm(movies_df)
-    n_movies = len(movies_df)
+    bayesian_popularity = build_bayesian_popularity(movies_df)
+    recency_score = build_recency_score(movies_df)
+
+    pools_cache = {a["name"]: build_archetype_pools(movies_df, a) for a in ARCHETYPES}
+    for name, (pref, glob) in pools_cache.items():
+        logger.info(
+            "Archetype '%s': preferred pool=%d, global pool=%d.",
+            name,
+            len(pref),
+            len(glob),
+        )
 
     all_rows = []
     for _, user in users_df.iterrows():
-        pref_genres_str = str(user["preferred_genres"])
-        pref_langs_str = str(user["preferred_language"])
-        pref_genres = pref_genres_str.split("|") if pref_genres_str else []
-        pref_langs = set(pref_langs_str.split("|")) if pref_langs_str else set()
+        archetype = ARCHETYPE_BY_NAME[str(user["archetype"])]
+        preferred_idx, global_idx = pools_cache[archetype["name"]]
 
-        genre_vec = build_genre_weight_vector(pref_genres)
+        pref_genres = str(user["preferred_genres"]).split("|")
+        pref_langs = set(str(user["preferred_language"]).split("|"))
+
+        lo, hi = archetype["preferred_pool_ratio_jitter"]
+        preferred_ratio = rng.uniform(lo, hi)
+
+        genre_vec = build_jittered_genre_vector(pref_genres, rng)
+        genre_score = genre_onehot @ genre_vec
+
+        # sample proportionally to genre score * Bayesian popularity * recency
+        sampling_weights = (
+            np.clip(genre_score, 0.01, None) * bayesian_popularity * recency_score
+        )
+
+        k = int(rng.integers(MIN_RATINGS_PER_USER, MAX_RATINGS_PER_USER + 1))
+        candidate_idx = sample_candidate_indices(
+            preferred_idx, global_idx, k, preferred_ratio, rng, weights=sampling_weights
+        )
+        k = len(candidate_idx)
+
         lang_score = compute_language_preference_scores(movie_language, pref_langs)
 
         base_score = (
-            GENRE_SCORE_COEF * (genre_onehot @ genre_vec)
+            GENRE_SCORE_COEF * genre_score
             + LANGUAGE_SCORE_COEF * lang_score
             + POPULARITY_SCORE_COEF * popularity_norm
         )
 
-        gumbel_noise = -np.log(-np.log(rng.random(n_movies) + 1e-12) + 1e-12)
-        keys = base_score + GUMBEL_TEMPERATURE * gumbel_noise
+        selected_scores = base_score[candidate_idx]
+        gumbel_noise = -np.log(-np.log(rng.random(len(candidate_idx)) + 1e-12) + 1e-12)
+        keys = selected_scores + GUMBEL_TEMPERATURE * gumbel_noise
+        order = np.argsort(-keys)
+        candidate_idx = candidate_idx[order]
+        selected_scores = selected_scores[order]
 
-        k = int(rng.integers(MIN_RATINGS_PER_USER, MAX_RATINGS_PER_USER + 1))
-        k = min(k, n_movies)
-        top_idx = np.argpartition(-keys, k - 1)[:k]
-
-        selected_scores = base_score[top_idx]
         s_min, s_max = selected_scores.min(), selected_scores.max()
         norm = (selected_scores - s_min) / (s_max - s_min + 1e-8)
 
@@ -256,11 +497,11 @@ def generate_ratings(
         ratings = np.clip(ratings, 0.5, 5.0)
         ratings = np.round(ratings * 2) / 2
 
-        n_train = int(round(k * TRAIN_SPLIT_RATIO))
+        n_train = round(k * TRAIN_SPLIT_RATIO)
         shuffle_order = rng.permutation(k)
         split_labels = np.where(np.argsort(shuffle_order) < n_train, "train", "holdout")
 
-        selected_movie_ids = movie_ids[top_idx]
+        selected_movie_ids = movie_ids[candidate_idx]
         for mid, r, split in zip(selected_movie_ids, ratings, split_labels):
             all_rows.append(
                 {

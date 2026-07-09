@@ -1,3 +1,5 @@
+import argparse
+
 import pandas as pd
 from api.db import engine, SessionLocal, Base
 from api.models import Movie, SyntheticUser
@@ -9,7 +11,7 @@ def init_db():
     print("Database schema created successfully.")
 
 
-def seed_movies():
+def seed_movies(force: bool = False):
     print("Seeding movies from movies_final.csv...")
     csv_path = "data/processed/movies_final.csv"
 
@@ -27,9 +29,14 @@ def seed_movies():
 
     db = SessionLocal()
     try:
-        if db.query(Movie).count() > 0:
+        if db.query(Movie).count() > 0 and not force:
             print("Movies table already populated. Skipping seed.")
             return
+
+        if force and db.query(Movie).count() > 0:
+            db.query(Movie).delete()
+            db.commit()
+            print("Cleared existing movies for re-seed.")
 
         movies_to_add = []
         for _, row in df.iterrows():
@@ -53,7 +60,7 @@ def seed_movies():
         db.close()
 
 
-def seed_synthetic_users():
+def seed_synthetic_users(force: bool = False):
     print("Seeding synthetic_users from synthetic_users.csv...")
     csv_path = "data/processed/synthetic_users.csv"
 
@@ -65,9 +72,14 @@ def seed_synthetic_users():
 
     db = SessionLocal()
     try:
-        if db.query(SyntheticUser).count() > 0:
+        if db.query(SyntheticUser).count() > 0 and not force:
             print("synthetic_users table already populated. Skipping seed.")
             return
+
+        if force and db.query(SyntheticUser).count() > 0:
+            db.query(SyntheticUser).delete()
+            db.commit()
+            print("Cleared existing synthetic users for re-seed.")
 
         users_to_add = [
             SyntheticUser(
@@ -91,7 +103,19 @@ def seed_synthetic_users():
         db.close()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed SQLite database from processed CSVs.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Clear and re-seed tables that already contain data.",
+    )
+    args = parser.parse_args()
+
     init_db()
-    seed_movies()
-    seed_synthetic_users()
+    seed_movies(force=args.force)
+    seed_synthetic_users(force=args.force)
+
+
+if __name__ == "__main__":
+    main()
