@@ -16,6 +16,21 @@ templates = Jinja2Templates(directory="api/templates")
 
 RESULTS_DIR = Path("results")
 MODELS = ["cf", "cbf", "hybrid", "localized"]
+RESULT_MODEL_LABELS = {
+    "MF_ColdStart": "CF_ColdStart",  # results generated before the rename
+    "CF_ColdStart": "CF_ColdStart",
+}
+
+
+def _display_model_names(rows: list[dict]) -> list[dict]:
+    """Present stable website terminology without mutating CSV artifacts."""
+    for row in rows:
+        if "Model" in row:
+            row["Model"] = RESULT_MODEL_LABELS.get(row["Model"], row["Model"])
+        for key in ("Model_A", "Model_B"):
+            if key in row:
+                row[key] = RESULT_MODEL_LABELS.get(row[key], row[key])
+    return rows
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -95,10 +110,12 @@ def recommend_api(
 def metrics_page(request: Request):
     perf_path = RESULTS_DIR / "rq1_model_performance.csv"
     sig_path = RESULTS_DIR / "rq1_significance_tests.csv"
-    performance = (
+    performance = _display_model_names(
         pd.read_csv(perf_path).to_dict("records") if perf_path.exists() else []
     )
-    significance = pd.read_csv(sig_path).to_dict("records") if sig_path.exists() else []
+    significance = _display_model_names(
+        pd.read_csv(sig_path).to_dict("records") if sig_path.exists() else []
+    )
     return templates.TemplateResponse(
         request,
         "metrics.html",
@@ -110,8 +127,12 @@ def metrics_page(request: Request):
 def bias_page(request: Request):
     div_path = RESULTS_DIR / "rq2_diversity_by_model.csv"
     fb_path = RESULTS_DIR / "rq2_filter_bubble_by_archetype.csv"
-    diversity = pd.read_csv(div_path).to_dict("records") if div_path.exists() else []
-    filter_bubble = pd.read_csv(fb_path).to_dict("records") if fb_path.exists() else []
+    diversity = _display_model_names(
+        pd.read_csv(div_path).to_dict("records") if div_path.exists() else []
+    )
+    filter_bubble = _display_model_names(
+        pd.read_csv(fb_path).to_dict("records") if fb_path.exists() else []
+    )
     return templates.TemplateResponse(
         request, "bias.html", {"diversity": diversity, "filter_bubble": filter_bubble}
     )

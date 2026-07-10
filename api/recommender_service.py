@@ -19,19 +19,19 @@ RESULTS_DIR = Path("results")
 
 MODEL_NAMES = {"cf", "cbf", "hybrid", "localized"}
 MODEL_LABELS = {
-    "cf": "MF (Cold-start)",
+    "cf": "CF (Cold-start)",
     "cbf": "Content-Based Filtering",
     "hybrid": "Standard Hybrid",
     "localized": "Localized Hybrid",
 }
 
-# Map from prototype model keys → evaluation CSV model names (MODEL_ORDER labels)
-# evaluation_metrics.py uses these exact strings in the Model column.
-PROTO_TO_EVAL_MODEL: dict[str, str] = {
-    "cf": "MF_ColdStart",
-    "cbf": "CBF",
-    "hybrid": "NonLocal_Hybrid",
-    "localized": "Localized_Hybrid",
+# The first value is the current evaluation artifact name.  The legacy value
+# keeps the UI usable with results produced before the terminology change.
+PROTO_TO_EVAL_MODELS: dict[str, tuple[str, ...]] = {
+    "cf": ("CF_ColdStart", "MF_ColdStart"),
+    "cbf": ("CBF",),
+    "hybrid": ("NonLocal_Hybrid",),
+    "localized": ("Localized_Hybrid",),
 }
 
 # evaluation_metrics.py may name these columns differently; add variants seen.
@@ -134,9 +134,10 @@ class RecommenderService:
         if user_col is None or model_col is None:
             return None
 
-        # Map prototype model key ("cf", "cbf", ...) to the evaluation CSV label
-        eval_model_name = PROTO_TO_EVAL_MODEL.get(model, model)
-        row = df[(df[user_col] == user_id) & (df[model_col] == eval_model_name)]
+        eval_model_names = PROTO_TO_EVAL_MODELS.get(model, (model,))
+        row = df[
+            (df[user_col] == user_id) & df[model_col].isin(eval_model_names)
+        ]
         if row.empty:
             return None
         r = row.iloc[0]

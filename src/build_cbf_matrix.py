@@ -27,8 +27,6 @@ TFIDF_MIN_DF = 2
 
 BAYESIAN_MIN_VOTES_QUANTILE = 0.25
 
-GENRE_REPEAT_COUNT = 2
-
 REQUIRED_INPUT_COLUMNS = [
     "movieId",
     "title",
@@ -87,12 +85,7 @@ def build_content_soup(movies_df: pd.DataFrame) -> pd.Series:
         .astype(str)
         .str.replace("|", " ", regex=False)
     )
-    language = movies_df["language"].fillna("").astype(str)
-    overview = movies_df["overview"].fillna("").astype(str).str.lower()
-
-    genre_block = ((genres + " ") * GENRE_REPEAT_COUNT).str.strip()
-
-    soup = (genre_block + " " + language + " " + overview).str.strip()
+    soup = genres.str.strip()
 
     empty_count = int(soup.str.len().eq(0).sum())
     if empty_count > 0:

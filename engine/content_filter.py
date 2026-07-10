@@ -29,8 +29,6 @@ REQUIRED_METADATA_KEYS = [
     "n_movies",
 ]
 
-QUALITY_BLEND_ALPHA: float = 0.15
-
 
 def check_file_exists(path: str) -> None:
     if not os.path.exists(path):
@@ -77,23 +75,6 @@ class ContentBasedFilter:
         self.language = cast(list[str], self.metadata["language"])
         self.n_movies = cast(int, self.metadata["n_movies"])
 
-        if "quality_scores" in self.metadata:
-            self.quality_scores = cast(
-                np.ndarray, self.metadata["quality_scores"]
-            ).astype(np.float32)
-            logger.info(
-                "Loaded quality_scores from metadata (non-zero: %d / %d).",
-                int((self.quality_scores > 0).sum()),
-                self.n_movies,
-            )
-        else:
-            logger.warning(
-                "quality_scores not found in cbf_metadata.pkl — "
-                "falling back to zeros. Re-run build_cbf_matrix.py to enable "
-                "quality-based re-ranking."
-            )
-            self.quality_scores = np.zeros(self.n_movies, dtype=np.float32)
-
         logger.info("Loaded CBF matrix: %d movies.", self.n_movies)
 
     def _resolve_indices(self, movie_ids: list[int]) -> list[int]:
@@ -127,10 +108,7 @@ class ContentBasedFilter:
         else:
             norm_sims = np.zeros_like(raw_sims)
 
-        blended = (
-            1.0 - QUALITY_BLEND_ALPHA
-        ) * norm_sims + QUALITY_BLEND_ALPHA * self.quality_scores
-        return blended.astype(np.float32)
+        return np.asarray(norm_sims, dtype=np.float32).ravel()
 
     def recommend(self, liked_movie_ids: list[int], k: int = 10) -> list[dict]:
         scores = self.get_content_scores(liked_movie_ids)

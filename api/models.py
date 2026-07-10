@@ -20,7 +20,7 @@ class Movie(Base):
 class SyntheticUser(Base):
     __tablename__ = "synthetic_users"
 
-    id = Column(Integer, primary_key=True, index=True)  # == synthetic userId
+    id = Column(Integer, primary_key=True, index=True) 
     age = Column(Integer)
     gender = Column(String)
     education = Column(String)

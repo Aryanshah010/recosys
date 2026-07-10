@@ -51,8 +51,8 @@ class HybridWeights:
         return self.cf + self.cbf + self.localization
 
 
-STANDARD_HYBRID_WEIGHTS = HybridWeights(cf=0.60, cbf=0.40)
-LOCALIZED_HYBRID_WEIGHTS = HybridWeights(cf=0.45, cbf=0.35, localization=0.20)
+STANDARD_HYBRID_WEIGHTS = HybridWeights(cf=0.625, cbf=0.375)
+LOCALIZED_HYBRID_WEIGHTS = HybridWeights(cf=0.50, cbf=0.30, localization=0.20)
 
 GENRE_INDEX: dict[str, int] = {g: i for i, g in enumerate(CANONICAL_GENRES)}
 

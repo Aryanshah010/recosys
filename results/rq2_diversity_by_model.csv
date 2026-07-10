@@ -1,5 +1,5 @@
 Model,Language_Diversity,Genre_Diversity,Novelty@10
-MF_ColdStart,2.702,8.99,0.382
-CBF,3.539,6.93,0.401
-NonLocal_Hybrid,3.088,7.819,0.308
-Localized_Hybrid,1.415,7.788,0.047
+CF_ColdStart,5.567,10.873,0.807
+CBF,3.111,4.997,0.501
+NonLocal_Hybrid,4.269,6.199,0.526
+Localized_Hybrid,2.99,6.332,0.279

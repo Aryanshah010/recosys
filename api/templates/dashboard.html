@@ -17,10 +17,10 @@
     <div class="model-col {% if col.key == 'localized' %}localized{% endif %}">
       <div class="model-title">{{ col.label }}</div>
       <div class="model-sub">
-        {% if col.key == 'cf' %}Model 1 · MF Cold-start Baseline
+        {% if col.key == 'cf' %}Model 1 · CF Cold-start Baseline
         {% elif col.key == 'cbf' %}Model 2 · Content-Based Baseline
-        {% elif col.key == 'hybrid' %}Model 3 · 0.60 MF + 0.40 CBF
-        {% else %}Model 4 · Proposed · 0.45 MF + 0.35 CBF + 0.20 Localization{% endif %}
+        {% elif col.key == 'hybrid' %}Model 3 · 0.625 CF + 0.375 CBF
+        {% else %}Model 4 · Proposed · 0.50 CF + 0.30 CBF + 0.20 Preference{% endif %}
       </div>
 
       {% for r in col.recs %}
