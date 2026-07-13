@@ -1,0 +1,64 @@
+{% extends "base.html" %} {% block title %}{{ movie.title }} · Rate movie{%
+endblock %} {% block content %}
+<a class="back" href="/dashboard/{{ profile.userId }}"
+  >← Back to recommendations</a
+>
+<section class="detail-layout">
+  <div
+    class="detail-poster poster{% if not movie.poster_url %} poster-fallback{% endif %}"
+  >
+    {% if movie.poster_url %}<img
+      src="{{ movie.poster_url }}"
+      alt="{{ movie.title }} poster"
+    />{% else %}<span>{{ movie.title }}</span>{% endif %}
+  </div>
+  <div>
+    <div class="eyebrow">Movie details · User #{{ profile.userId }}</div>
+    <h1>{{ movie.title }}</h1>
+    <p class="meta large">
+      {{ movie.year or 'Year unavailable' }} · {{ movie.language }} · {{
+      movie.genres }}
+    </p>
+    <p class="overview">
+      {{ movie.overview or 'No overview was supplied in the processed dataset.'
+      }}
+    </p>
+    <div class="detail-stats">
+      <span
+        >TMDB rating
+        <b>★ {{ '%.1f'|format(movie.average_rating or 0) }}</b></span
+      ><span>Runtime <b>{{ movie.runtime or 'Not supplied' }}</b></span>
+    </div>
+    <div class="rating-box">
+      <div>
+        <div class="eyebrow">Your rating</div>
+        <h2>How would User #{{ profile.userId }} rate it?</h2>
+      </div>
+      <div class="star-picker" id="star-picker" role="radiogroup">
+        {% for value in range(1, 6) %}<button
+          type="button"
+          data-rating="{{ value }}"
+          aria-label="{{ value }} stars"
+        >
+          ★</button
+        >{% endfor %}
+      </div>
+      <p id="rating-label">
+        {% if current_rating %}Saved rating: {{ current_rating }} / 5{% else
+        %}Choose from one to five stars{% endif %}
+      </p>
+      <button class="btn" id="submit-rating" disabled>
+        Save rating &amp; regenerate
+      </button>
+    </div>
+  </div>
+</section>
+<div
+  id="movie-config"
+  data-movie-id="{{ movie.movieId }}"
+  data-user-id="{{ profile.userId }}"
+  data-current-rating="{{ current_rating if current_rating is not none else '' }}"
+  hidden
+></div>
+<div id="rate-progress" class="pipeline-card" hidden></div>
+{% endblock %}

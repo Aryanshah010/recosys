@@ -1,13 +1,13 @@
 import argparse
 
 import pandas as pd
-from api.db import engine, SessionLocal, Base
+from api.db import engine, SessionLocal, Base, ensure_schema
 from api.models import Movie, SyntheticUser
 
 
 def init_db():
     print("Initializing database tables...")
-    Base.metadata.create_all(bind=engine)
+    ensure_schema()
     print("Database schema created successfully.")
 
 
@@ -47,6 +47,10 @@ def seed_movies(force: bool = False):
                 title=str(row["title"]),
                 genres=str(row["clean_genres"]),
                 original_language=str(row["language"]).lower(),
+                overview=str(row.get("overview", "")) if pd.notna(row.get("overview")) else None,
+                release_year=int(row["release_year"]) if pd.notna(row.get("release_year")) else None,
+                vote_average=float(row["vote_average"]) if pd.notna(row.get("vote_average")) else None,
+                popularity=float(row["popularity"]) if pd.notna(row.get("popularity")) else None,
             )
             movies_to_add.append(movie)
 

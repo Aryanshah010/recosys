@@ -155,7 +155,7 @@ def main():
     total_elapsed = time.time() - pipeline_start
     print_banner("PIPELINE COMPLETE")
     print(f"  Steps completed:  {completed_steps}/{total_steps}")
-    print(f"  Total time:       {total_elapsed:.1f}s ({total_elapsed/60:.1f} min)")
+    print(f"  Total time:       {total_elapsed:.1f}s ({total_elapsed / 60:.1f} min)")
     print(f"  Results saved to: {RESULTS_DIR / 'evaluation_user_level.csv'}")
     print("\n  SVD trained on MovieLens only; synthetic users are evaluation-only.")
     print("  Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")

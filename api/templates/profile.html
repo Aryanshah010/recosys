@@ -1,34 +1,43 @@
-{% extends "base.html" %}
-{% block title %}User #{{ profile.userId }} Profile{% endblock %}
-{% block content %}
-  <div class="eyebrow">Synthetic User Profile</div>
-  <h1>User #{{ profile.userId }} — {{ profile.archetype }} archetype</h1>
-
-  <div class="card">
-    <div class="profile-grid">
-      <div>
-        <div class="stat-label">Age</div>
-        <div class="stat-value">{{ profile.age }}</div>
-      </div>
-      <div>
-        <div class="stat-label">Education</div>
-        <div class="stat-value">{{ profile.education }}</div>
-      </div>
-      <div>
-        <div class="stat-label">Gender</div>
-        <div class="stat-value">{{ profile.gender }}</div>
+{% extends "base.html" %} {% block title %}User #{{ profile.userId }} Profile{%
+endblock %} {% block content %}
+<div class="eyebrow">Synthetic user profile</div>
+<h1>User #{{ profile.userId }} · {{ profile.archetype }}</h1>
+<div class="card profile-card">
+  <div class="profile-grid">
+    <div>
+      <div class="stat-label">Age</div>
+      <div class="stat-value">{{ profile.age }}</div>
+    </div>
+    <div>
+      <div class="stat-label">Gender</div>
+      <div class="stat-value">{{ profile.gender }}</div>
+    </div>
+    <div>
+      <div class="stat-label">Occupation</div>
+      <div class="stat-value">{{ profile.occupation }}</div>
+    </div>
+    <div>
+      <div class="stat-label">Movies rated</div>
+      <div class="stat-value">
+        {{ profile.base_rating_count + profile.manual_rating_count }}
       </div>
     </div>
-
-    <div class="section-gap">
-      <div class="stat-label">Preferred genres</div>
-      {% for g in profile.preferred_genres %}<span class="tag">{{ g }}</span>{% endfor %}
-    </div>
-    <div class="section-gap">
-      <div class="stat-label">Preferred languages</div>
-      {% for l in profile.preferred_language %}<span class="tag">{{ l }}</span>{% endfor %}
-    </div>
-
-    <a class="btn" href="/dashboard/{{ profile.userId }}">Run all 4 models &rarr;</a>
   </div>
+  <div class="preference-block">
+    <div>
+      <div class="stat-label">Preferred genres</div>
+      {% for g in profile.preferred_genres %}<span class="tag">{{ g }}</span>{%
+      endfor %}
+    </div>
+    <div>
+      <div class="stat-label">Preferred languages</div>
+      {% for language in profile.preferred_language %}<span class="tag"
+        >{{ language }}</span
+      >{% endfor %}
+    </div>
+  </div>
+  <a class="btn" href="/dashboard/{{ profile.userId }}"
+    >Generate recommendations →</a
+  >
+</div>
 {% endblock %}

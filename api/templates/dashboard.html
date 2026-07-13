@@ -1,56 +1,92 @@
-{% extends "base.html" %}
-{% block title %}Comparison — User #{{ profile.userId }}{% endblock %}
-{% block content %}
-  <div class="eyebrow">Live Recommendation Comparison</div>
-  <h1>User #{{ profile.userId }} — {{ profile.archetype }}</h1>
-  <p class="caption">
-    Prefers <span class="mono">{{ profile.preferred_genres | join(', ') }}</span> in
-    <span class="mono">{{ profile.preferred_language | join(', ') }}</span>.
-    All four columns below are computed live from the trained SVD model and TF-IDF
-    content matrix for this user — nothing here is cached.
-    <a href="/profile/{{ profile.userId }}">View full profile</a> ·
-    <a href="/">Change user</a>
-  </p>
-
-  <div class="compare-grid">
-    {% for col in columns %}
-    <div class="model-col {% if col.key == 'localized' %}localized{% endif %}">
-      <div class="model-title">{{ col.label }}</div>
-      <div class="model-sub">
-        {% if col.key == 'cf' %}Model 1 · CF Cold-start Baseline
-        {% elif col.key == 'cbf' %}Model 2 · Content-Based Baseline
-        {% elif col.key == 'hybrid' %}Model 3 · 0.625 CF + 0.375 CBF
-        {% else %}Model 4 · Proposed · 0.50 CF + 0.30 CBF + 0.20 Preference{% endif %}
-      </div>
-
-      {% for r in col.recs %}
-      <div class="rec-row">
-        <span class="rec-rank">{{ r.rank }}</span>
-        <span class="rec-title">{{ r.title[:34] }}</span>
-        <span class="rec-score">{{ '%.3f' | format(r.score) }}</span>
-      </div>
-      {% endfor %}
-
-      {% if col.metrics %}
-      <div class="metrics-footer">
-        <span>P@10 <b>{{ col.metrics.precision_at_10 }}</b></span>
-        <span>R@10 <b>{{ col.metrics.recall_at_10 }}</b></span>
-        <span>NDCG@10 <b>{{ col.metrics.ndcg_at_10 }}</b></span>
-        {% if col.metrics.novelty_at_10 is not none %}
-        <span>Novelty <b>{{ col.metrics.novelty_at_10 }}</b></span>
-        {% endif %}
-        {% if col.metrics.filter_bubble is not none %}
-        <span>Bubble <b>{{ col.metrics.filter_bubble }}</b></span>
-        {% endif %}
-      </div>
-      {% endif %}
-    </div>
-    {% endfor %}
+{% extends "base.html" %} {% block title %}Recommendation Lab · User #{{
+profile.userId }}{% endblock %} {% block content %}
+<div class="eyebrow">Interactive recommendation lab</div>
+<div class="dashboard-title">
+  <div>
+    <h1>User #{{ profile.userId }} · {{ profile.archetype }}</h1>
+    <p class="caption">
+      Preferred: {{ profile.preferred_genres|join(', ') }} · {{
+      profile.preferred_language|join(', ') }}.
+      <a href="/profile/{{ profile.userId }}">Profile</a> ·
+      <a href="/history/{{ profile.userId }}">History</a>
+    </p>
   </div>
+  <a class="quiet-btn" href="/">Change user</a>
+</div>
 
-  <p class="caption section-gap">
-    Metrics shown are precomputed on the held-out split (evaluation_user_level.csv),
-    not recalculated on page load — the ranked lists above are live, the scored
-    evaluation is fixed to keep the reported RQ1 statistics reproducible.
-  </p>
+<section class="control-card">
+  <div>
+    <div class="eyebrow">Localized hybrid controls</div>
+    <h2>Adjust the proposed model</h2>
+    <p class="caption">
+      Content weight is the remaining share so all components always total 1.00.
+    </p>
+  </div>
+  <div class="sliders">
+    <label
+      >Collaborative <output id="collaborative-value">0.50</output
+      ><input
+        id="collaborative"
+        type="range"
+        min="0"
+        max="0.8"
+        step="0.02"
+        value="0.50" /></label
+    ><label
+      >Genre preference <output id="genre-value">0.18</output
+      ><input
+        id="genre"
+        type="range"
+        min="0"
+        max="0.5"
+        step="0.02"
+        value="0.18" /></label
+    ><label
+      >Language preference <output id="language-value">0.12</output
+      ><input
+        id="language"
+        type="range"
+        min="0"
+        max="0.5"
+        step="0.02"
+        value="0.12"
+    /></label>
+  </div>
+  <button class="btn" id="generate">Generate recommendations</button>
+</section>
+
+<section class="pipeline-card" aria-live="polite">
+  <div class="pipeline-head">
+    <div>
+      <div class="eyebrow">Actual request stages</div>
+      <h2>Recommendation pipeline</h2>
+    </div>
+    <span id="pipeline-state">Ready</span>
+  </div>
+  <ol id="pipeline">
+    <li>Waiting for a generation request</li>
+  </ol>
+</section>
+
+<section id="results" hidden>
+  <div class="section-heading">
+    <div>
+      <div class="eyebrow">Top 10 results</div>
+      <h2>Model comparison</h2>
+    </div>
+    <p id="generated-at" class="caption"></p>
+  </div>
+  <div class="model-tabs" id="model-tabs"></div>
+  <div id="recommendation-cards" class="movie-grid"></div>
+  <div class="metrics-grid" id="metrics-grid"></div>
+  <div class="changes-card">
+    <div>
+      <div class="eyebrow">Before / after</div>
+      <h2>What changed?</h2>
+    </div>
+    <div id="changes"></div>
+  </div>
+</section>
+
+<div id="dashboard-config" data-user-id="{{ profile.userId }}" hidden></div>
 {% endblock %}

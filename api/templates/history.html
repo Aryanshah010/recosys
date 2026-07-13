@@ -1,0 +1,30 @@
+{% extends "base.html" %} {% block title %}Recommendation history{% endblock %}
+{% block content %}
+<div class="eyebrow">Persisted SQLite sessions</div>
+<h1>User #{{ user_id }} recommendation history</h1>
+<p class="caption">
+  Each entry records a generated Top-10 comparison and the weights used at that
+  time.
+</p>
+<div class="history-list">
+  {% for session in sessions %}
+  <article class="history-row">
+    <div>
+      <b>Session #{{ session.id }}</b
+      ><span
+        >{{ session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at
+        else '' }}</span
+      >
+    </div>
+    <div>
+      <span class="tag">{{ session.trigger }}</span
+      ><code>{{ session.weights_json }}</code>
+    </div>
+  </article>
+  {% else %}
+  <p class="caption">
+    No generation sessions yet. Open the recommendation lab to create one.
+  </p>
+  {% endfor %}
+</div>
+<a class="btn" href="/dashboard/{{ user_id }}">Back to lab →</a>{% endblock %}
