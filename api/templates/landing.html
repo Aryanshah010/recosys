@@ -16,65 +16,61 @@ Recommender{% endblock %} {% block content %}
   </div>
 </section>
 
-<section>
-  <div class="section-heading">
-    <div>
-      <div class="eyebrow">Catalogue preview</div>
-      <h2>Top-rated movies</h2>
-    </div>
-    <p class="caption">
-      Movie metadata is drawn from the processed MovieLens–TMDB dataset.
-    </p>
-  </div>
-  <div class="movie-grid compact">
-    {% for movie in top_movies %}
-    <article class="movie-card preview-card">
-      <div
-        class="poster{% if not movie.poster_url %} poster-fallback{% endif %}"
-      >
-        {% if movie.poster_url %}<img
-          src="{{ movie.poster_url }}"
-          alt="{{ movie.title }} poster"
-        />{% else %}<span>{{ movie.title }}</span>{% endif %}
-      </div>
-      <div class="movie-copy">
-        <h3>{{ movie.title }}</h3>
-        <div class="meta">{{ movie.year or '—' }} · {{ movie.language }}</div>
-        <div class="tags">
-          {% for genre in movie.genres.split('|')[:2] %}<span>{{ genre }}</span
-          >{% endfor %}
-        </div>
-        <div class="rating">
-          ★ {{ '%.1f'|format(movie.average_rating or 0) }} TMDB
-        </div>
-      </div>
-    </article>
-    {% endfor %}
-  </div>
-</section>
-
 <section class="section-gap">
   <div class="section-heading">
     <div>
-      <div class="eyebrow">Step 1 · synthetic cohort</div>
+      <div class="eyebrow">synthetic cohort</div>
       <h2>Select a user to begin</h2>
     </div>
     <p class="caption">
-      The selection opens an interactive dashboard; no recommendations are
-      pre-rendered.
+      One sample per archetype (35% Hollywood · 20% Anime · 20% Bollywood · 15%
+      K-drama · 10% Mixed) — the selection opens an interactive dashboard; no
+      recommendations are pre-rendered.
     </p>
   </div>
-  <div class="grid-users">
-    {% for u in users %}<a class="user-tile" href="/dashboard/{{ u.id }}"
-      ><div class="avatar">{{ u.archetype[0]|upper }}</div>
-      <div>
-        <div class="archetype">{{ u.archetype }} profile</div>
-        <div class="uid">
-          User #{{ u.id }} · {{ u.education }} · age {{ u.age }}
+
+  {% if featured %}
+  <div class="archetype-group">
+    <h3 class="archetype-label">Featured</h3>
+    <div class="grid-users">
+      {% for u in featured %}<a class="user-tile" href="/dashboard/{{ u.id }}"
+        ><div class="avatar">{{ u.archetype[0]|upper }}</div>
+        <div>
+          <div class="archetype">{{ u.archetype }} profile</div>
+          <div class="uid">
+            User #{{ u.id }} · {{ u.education }} · age {{ u.age }}
+          </div>
         </div>
-      </div>
-      <span>→</span></a
-    >{% endfor %}
+        <span>→</span></a
+      >{% endfor %}
+    </div>
   </div>
+  {% endif %} {% for group in groups %}
+  <div class="archetype-group">
+    <h3 class="archetype-label">{{ group.archetype }}</h3>
+    <div class="grid-users">
+      {% for u in group.users %}<a
+        class="user-tile"
+        href="/dashboard/{{ u.id }}"
+        ><div class="avatar">{{ u.archetype[0]|upper }}</div>
+        <div>
+          <div class="archetype">{{ u.archetype }} profile</div>
+          <div class="uid">
+            User #{{ u.id }} · {{ u.education }} · age {{ u.age }}
+          </div>
+        </div>
+        <span>→</span></a
+      >{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <form id="jump-form" class="jump-form">
+    <label for="jump-user-id" class="caption"
+      >Or jump to a specific user ID</label
+    >
+    <input id="jump-user-id" type="number" min="1" placeholder="e.g. 217" />
+    <button class="quiet-btn" type="submit">Go →</button>
+  </form>
 </section>
 {% endblock %}

@@ -31,9 +31,6 @@ MODELS = ["cf", "cbf", "hybrid", "localized"]
 
 class GenerationRequest(BaseModel):
     user_id: int
-    collaborative: float = Field(default=0.50, ge=0, le=0.9)
-    genre: float = Field(default=0.18, ge=0, le=0.9)
-    language: float = Field(default=0.12, ge=0, le=0.9)
 
 
 class RatingRequest(GenerationRequest):
@@ -113,19 +110,19 @@ def _generate(db: Session, payload: GenerationRequest, trigger: str) -> dict:
     svc = get_service()
     if svc.get_user_profile(payload.user_id) is None:
         raise HTTPException(404, "Synthetic user not found.")
-    weights = svc.clean_weights(payload.model_dump())
     before = _previous_recommendations(db, payload.user_id)
     manual = _manual_ratings(db, payload.user_id)
     session = RecommendationSession(
-        user_id=payload.user_id, trigger=trigger, weights_json=json.dumps(weights)
+        user_id=payload.user_id, trigger=trigger, weights_json="{}"
     )
     db.add(session)
     db.flush()
-    results, metrics = {}, {}
+    results, metrics, applied_weights = {}, {}, {}
     for model in MODELS:
-        recs, applied = svc.recommend(
-            payload.user_id, model, manual, weights if model == "localized" else None
-        )
+        # Weights are fixed research configuration (see src/localization_config.py);
+        # they are not user-adjustable in the UI.
+        recs, applied = svc.recommend(payload.user_id, model, manual, None)
+        applied_weights[model] = applied
         live = svc.live_metrics(payload.user_id, recs)
         results[model] = {
             "label": MODEL_LABELS[model],
@@ -152,11 +149,11 @@ def _generate(db: Session, payload: GenerationRequest, trigger: str) -> dict:
                 metrics_json=json.dumps(live),
             )
         )
+    session.weights_json = json.dumps(applied_weights.get("localized", {}))
     db.commit()
     return {
         "session_id": session.id,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "weights": weights,
         "results": results,
         "metrics": metrics,
         "changes": {
@@ -179,13 +176,37 @@ def _generate(db: Session, payload: GenerationRequest, trigger: str) -> dict:
     }
 
 
+ARCHETYPES = ("hollywood", "anime", "bollywood", "kdrama", "mixed")
+USERS_PER_ARCHETYPE = 4
+# Optional: pin specific user ids you've verified demo well (e.g. a "mixed"
+# user with a clearly low filter-bubble score, or one where Localized Hybrid
+# visibly beats Standard Hybrid). Leave empty to skip this section.
+FEATURED_USER_IDS: list[int] = []
+
+
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request, db: Session = Depends(get_db)):
-    users = db.query(SyntheticUser).order_by(SyntheticUser.id).limit(36).all()
+    featured = (
+        db.query(SyntheticUser).filter(SyntheticUser.id.in_(FEATURED_USER_IDS)).all()
+        if FEATURED_USER_IDS
+        else []
+    )
+    # Grouped (not a flat list) so every archetype is visibly represented,
+    # including the smaller "mixed" segment, and the cohort's stratified
+    # design is legible straight from the landing page.
+    groups = [
+        {
+            "archetype": archetype,
+            "users": db.query(SyntheticUser)
+            .filter(SyntheticUser.archetype == archetype)
+            .order_by(SyntheticUser.id)
+            .limit(USERS_PER_ARCHETYPE)
+            .all(),
+        }
+        for archetype in ARCHETYPES
+    ]
     return templates.TemplateResponse(
-        request,
-        "landing.html",
-        {"users": users, "top_movies": get_service().top_movies()},
+        request, "landing.html", {"groups": groups, "featured": featured}
     )
 
 
@@ -231,20 +252,6 @@ def movie_detail(
             "profile": profile_value,
             "current_rating": current["rating"] if current else None,
         },
-    )
-
-
-@router.get("/history/{user_id}", response_class=HTMLResponse)
-def history(request: Request, user_id: int, db: Session = Depends(get_db)):
-    sessions = (
-        db.query(RecommendationSession)
-        .filter(RecommendationSession.user_id == user_id)
-        .order_by(RecommendationSession.id.desc())
-        .limit(12)
-        .all()
-    )
-    return templates.TemplateResponse(
-        request, "history.html", {"user_id": user_id, "sessions": sessions}
     )
 
 

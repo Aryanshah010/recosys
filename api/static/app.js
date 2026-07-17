@@ -17,11 +17,6 @@
   const userId = Number(
     dashboardConfig?.dataset.userId ?? movieConfig?.dataset.userId ?? 0,
   );
-  const weights = () => ({
-    collaborative: +$("#collaborative").value,
-    genre: +$("#genre").value,
-    language: +$("#language").value,
-  });
   const showPipeline = async (steps) => {
     const list = $("#pipeline");
     if (!list) return;
@@ -99,31 +94,44 @@
       )
       .join("");
   };
+  let generating = false;
   const generate = async () => {
-    const response = await fetch("/api/recommendations/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, ...weights() }),
-    });
-    const data = await response.json();
-    await showPipeline(data.pipeline);
-    render(data);
+    if (generating) return; // guard against double-fires (double-click, etc.)
+    generating = true;
+    if ($("#generate")) $("#generate").disabled = true;
+    try {
+      const response = await fetch("/api/recommendations/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const data = await response.json();
+      await showPipeline(data.pipeline);
+      render(data);
+    } finally {
+      generating = false;
+      if ($("#generate")) $("#generate").disabled = false;
+    }
   };
+  if ($("#jump-form")) {
+    $("#jump-form").onsubmit = (event) => {
+      event.preventDefault();
+      const id = $("#jump-user-id").value.trim();
+      if (id) location.href = `/dashboard/${id}`;
+    };
+  }
   if ($("#generate")) {
-    ["collaborative", "genre", "language"].forEach(
-      (id) =>
-        ($("#" + id).oninput = () =>
-          ($("#" + id + "-value").textContent = (+$("#" + id).value).toFixed(
-            2,
-          ))),
-    );
     $("#generate").onclick = generate;
+    // Only auto-render on load if we're arriving here right after a rating
+    // was saved (see the rating flow below). Just opening/browsing a user's
+    // dashboard should never silently write a new session — that requires
+    // an explicit "Generate recommendations" click.
     const saved = sessionStorage.getItem("recosys-result");
     if (saved) {
       sessionStorage.removeItem("recosys-result");
       const data = JSON.parse(saved);
       showPipeline(data.pipeline).then(() => render(data));
-    } else generate();
+    }
   }
   if ($("#star-picker") && movieConfig) {
     let selected = Number(movieConfig?.dataset.currentRating || 0);
@@ -152,13 +160,7 @@
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            rating: selected,
-            collaborative: 0.5,
-            genre: 0.18,
-            language: 0.12,
-          }),
+          body: JSON.stringify({ user_id: userId, rating: selected }),
         },
       );
       const data = await response.json();

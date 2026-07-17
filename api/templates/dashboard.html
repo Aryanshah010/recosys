@@ -7,53 +7,14 @@ profile.userId }}{% endblock %} {% block content %}
     <p class="caption">
       Preferred: {{ profile.preferred_genres|join(', ') }} · {{
       profile.preferred_language|join(', ') }}.
-      <a href="/profile/{{ profile.userId }}">Profile</a> ·
-      <a href="/history/{{ profile.userId }}">History</a>
+      <a href="/profile/{{ profile.userId }}">Profile</a>
     </p>
   </div>
-  <a class="quiet-btn" href="/">Change user</a>
-</div>
-
-<section class="control-card">
   <div>
-    <div class="eyebrow">Localized hybrid controls</div>
-    <h2>Adjust the proposed model</h2>
-    <p class="caption">
-      Content weight is the remaining share so all components always total 1.00.
-    </p>
+    <button class="btn" id="generate">Generate recommendations</button>
+    <a class="quiet-btn" href="/">Change user</a>
   </div>
-  <div class="sliders">
-    <label
-      >Collaborative <output id="collaborative-value">0.50</output
-      ><input
-        id="collaborative"
-        type="range"
-        min="0"
-        max="0.8"
-        step="0.02"
-        value="0.50" /></label
-    ><label
-      >Genre preference <output id="genre-value">0.18</output
-      ><input
-        id="genre"
-        type="range"
-        min="0"
-        max="0.5"
-        step="0.02"
-        value="0.18" /></label
-    ><label
-      >Language preference <output id="language-value">0.12</output
-      ><input
-        id="language"
-        type="range"
-        min="0"
-        max="0.5"
-        step="0.02"
-        value="0.12"
-    /></label>
-  </div>
-  <button class="btn" id="generate">Generate recommendations</button>
-</section>
+</div>
 
 <section class="pipeline-card" aria-live="polite">
   <div class="pipeline-head">
@@ -71,6 +32,7 @@ profile.userId }}{% endblock %} {% block content %}
 <section id="results" hidden>
   <div class="section-heading">
     <div>
+      <br>
       <div class="eyebrow">Top 10 results</div>
       <h2>Model comparison</h2>
     </div>

@@ -175,6 +175,12 @@ class RecommenderService:
         intentionally uses the metadata endpoint first, rather than inventing a
         URL that could show an unrelated image.  Missing credentials leave the
         attractive local fallback card in place for fully offline viva demos.
+
+        TMDB issues two different credential formats from the same settings
+        page: a short v3 "API Key" (sent as a query param) and a long JWT-style
+        v4 "API Read Access Token" (sent as a Bearer header). Both are accepted
+        here, auto-detected by shape, so either one dropped into TMDB_API_KEY
+        works without further configuration.
         """
         if tmdb_id in self._poster_cache:
             return self._poster_cache[tmdb_id]
@@ -182,9 +188,16 @@ class RecommenderService:
         if not api_key:
             self._poster_cache[tmdb_id] = ""
             return ""
-        url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={api_key}"
+        is_v4_token = api_key.count(".") == 2  # v4 read-access tokens are JWTs
+        base_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+        if is_v4_token:
+            request = urllib.request.Request(
+                base_url, headers={"Authorization": f"Bearer {api_key}"}
+            )
+        else:
+            request = urllib.request.Request(f"{base_url}?api_key={api_key}")
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            with urllib.request.urlopen(request, timeout=2) as response:
                 import json
 
                 poster_path = json.loads(response.read().decode("utf-8")).get(
@@ -355,25 +368,19 @@ class RecommenderService:
     def live_metrics(
         self, user_id: int, recommendations: list[dict]
     ) -> dict[str, float]:
+        """Cheap, request-time signals only.
+
+        Precision@10 / Recall@10 / NDCG@10 are deliberately NOT computed here:
+        a single synthetic user has only 1-5 true holdout-positive movies, and
+        this ranks against the *entire* catalogue (no negative sampling), so a
+        per-request value is almost always 0.0000 and misleading in a live demo.
+        Those accuracy metrics are reported properly, with adequate sample size
+        and significance testing, on the precomputed RQ1 metrics page instead.
+        """
         profile = self.get_user_profile(user_id)
         if profile is None:
             return {}
         top = [item["movieId"] for item in recommendations]
-        positives = set(
-            self.ratings_df.loc[
-                (self.ratings_df.userId == user_id)
-                & (self.ratings_df.split == "holdout")
-                & (self.ratings_df.rating >= 3.5),
-                "movieId",
-            ].astype(int)
-        )
-        hits = [movie_id for movie_id in top if movie_id in positives]
-        dcg = sum(
-            1 / np.log2(index + 2)
-            for index, movie_id in enumerate(top)
-            if movie_id in positives
-        )
-        ideal = sum(1 / np.log2(index + 2) for index in range(min(10, len(positives))))
         genres = {
             genre
             for item in recommendations
@@ -388,9 +395,6 @@ class RecommenderService:
             and item["language"] not in profile["preferred_language"]
         )
         return {
-            "precision_at_10": round(len(hits) / 10, 4),
-            "recall_at_10": round(len(hits) / len(positives), 4) if positives else 0.0,
-            "ndcg_at_10": float(round(dcg / ideal, 4)) if ideal else 0.0,
             "coverage": round(len(set(top)) / self.engine.n_movies, 4),
             "genre_diversity": len(genres),
             "language_diversity": len(languages),

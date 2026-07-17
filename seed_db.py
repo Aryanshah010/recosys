@@ -1,7 +1,7 @@
 import argparse
 
 import pandas as pd
-from api.db import engine, SessionLocal, Base, ensure_schema
+from api.db import SessionLocal, ensure_schema
 from api.models import Movie, SyntheticUser
 
 
@@ -22,10 +22,13 @@ def seed_movies(force: bool = False):
         return
 
     has_tmdb = df["tmdbId"].notna()
-    df = pd.concat([
-        df[has_tmdb].drop_duplicates(subset=["tmdbId"], keep="first"),
-        df[~has_tmdb],
-    ], ignore_index=True)
+    df = pd.concat(
+        [
+            df[has_tmdb].drop_duplicates(subset=["tmdbId"], keep="first"),
+            df[~has_tmdb],
+        ],
+        ignore_index=True,
+    )
 
     db = SessionLocal()
     try:
@@ -47,10 +50,18 @@ def seed_movies(force: bool = False):
                 title=str(row["title"]),
                 genres=str(row["clean_genres"]),
                 original_language=str(row["language"]).lower(),
-                overview=str(row.get("overview", "")) if pd.notna(row.get("overview")) else None,
-                release_year=int(row["release_year"]) if pd.notna(row.get("release_year")) else None,
-                vote_average=float(row["vote_average"]) if pd.notna(row.get("vote_average")) else None,
-                popularity=float(row["popularity"]) if pd.notna(row.get("popularity")) else None,
+                overview=str(row.get("overview", ""))
+                if pd.notna(row.get("overview"))
+                else None,
+                release_year=int(row["release_year"])
+                if pd.notna(row.get("release_year"))
+                else None,
+                vote_average=float(row["vote_average"])
+                if pd.notna(row.get("vote_average"))
+                else None,
+                popularity=float(row["popularity"])
+                if pd.notna(row.get("popularity"))
+                else None,
             )
             movies_to_add.append(movie)
 
@@ -108,7 +119,9 @@ def seed_synthetic_users(force: bool = False):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed SQLite database from processed CSVs.")
+    parser = argparse.ArgumentParser(
+        description="Seed SQLite database from processed CSVs."
+    )
     parser.add_argument(
         "--force",
         action="store_true",
