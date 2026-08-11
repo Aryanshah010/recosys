@@ -1,8 +1,4 @@
-"""Presentation-friendly access to the existing recommender engines.
-
-The trained SVD and TF-IDF artifacts remain the scoring source.  This layer only
-adds persisted viva ratings, explanations and small, transparent live metrics.
-"""
+"""Presentation-friendly access to the existing recommender engines."""
 
 from __future__ import annotations
 
@@ -11,7 +7,6 @@ import os
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -54,7 +49,7 @@ METRIC_COLUMN_ALIASES = {
 }
 
 
-def _first_present(df: pd.DataFrame, names: list[str]) -> Optional[str]:
+def _first_present(df: pd.DataFrame, names: list[str]) -> str | None:
     return next((name for name in names if name in df.columns), None)
 
 
@@ -71,7 +66,7 @@ class RecommenderService:
         self.user_level_metrics = pd.read_csv(path) if path.exists() else None
         logger.info("RecommenderService ready.")
 
-    def get_user_profile(self, user_id: int) -> Optional[dict]:
+    def get_user_profile(self, user_id: int) -> dict | None:
         row = self.users_df.loc[self.users_df["userId"] == user_id]
         if row.empty:
             return None
@@ -103,7 +98,7 @@ class RecommenderService:
             profile["archetype"],
         )
 
-    def movie(self, movie_id: int) -> Optional[dict]:
+    def movie(self, movie_id: int) -> dict | None:
         """Return one catalogue movie as plain JSON-friendly values."""
         if movie_id not in self.movies_by_id.index:
             return None
@@ -115,8 +110,6 @@ class RecommenderService:
         if catalogue_id is None:
             return None
         tmdb_id = self._optional_int(row.get("tmdbId"))
-        # Poster paths are intentionally optional: a TMDB API enrichment can set
-        # them later; the visual fallback keeps the demonstration usable offline.
         poster_path = self._text(row.get("poster_path"))
         poster_url = (
             f"https://image.tmdb.org/t/p/w500{poster_path}"
@@ -169,26 +162,14 @@ class RecommenderService:
             return None
 
     def _tmdb_poster_url(self, tmdb_id: int) -> str:
-        """Resolve a real TMDB poster when the optional API key is configured.
-
-        TMDB stores a poster *path*, not an image at the numeric movie id.  This
-        intentionally uses the metadata endpoint first, rather than inventing a
-        URL that could show an unrelated image.  Missing credentials leave the
-        attractive local fallback card in place for fully offline viva demos.
-
-        TMDB issues two different credential formats from the same settings
-        page: a short v3 "API Key" (sent as a query param) and a long JWT-style
-        v4 "API Read Access Token" (sent as a Bearer header). Both are accepted
-        here, auto-detected by shape, so either one dropped into TMDB_API_KEY
-        works without further configuration.
-        """
+        """Resolve a real TMDB poster when the optional API key is configured."""
         if tmdb_id in self._poster_cache:
             return self._poster_cache[tmdb_id]
         api_key = os.getenv("TMDB_API_KEY")
         if not api_key:
             self._poster_cache[tmdb_id] = ""
             return ""
-        is_v4_token = api_key.count(".") == 2  # v4 read-access tokens are JWTs
+        is_v4_token = api_key.count(".") == 2
         base_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
         if is_v4_token:
             request = urllib.request.Request(
@@ -206,7 +187,7 @@ class RecommenderService:
             value = (
                 f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
             )
-        except OSError, urllib.error.URLError, ValueError:
+        except (OSError, urllib.error.URLError, ValueError):
             value = ""
         self._poster_cache[tmdb_id] = value
         return value
@@ -238,7 +219,7 @@ class RecommenderService:
         return sorted(liked)
 
     @staticmethod
-    def clean_weights(requested: Optional[dict]) -> dict[str, float]:
+    def clean_weights(requested: dict | None) -> dict[str, float]:
         values = {"collaborative": 0.50, "genre": 0.18, "language": 0.12}
         if requested:
             for key in values:
@@ -253,7 +234,7 @@ class RecommenderService:
         user_id: int,
         liked: list[int],
         profile: UserProfile,
-        weights: Optional[dict],
+        weights: dict | None,
     ) -> tuple[np.ndarray, dict[str, float]]:
         if weights is None:
             raw = {
@@ -268,8 +249,6 @@ class RecommenderService:
             applied = self.clean_weights(weights)
         cf = min_max_normalize(self.engine.get_cf_scores(user_id, liked))
         cbf = min_max_normalize(self.engine.get_cbf_scores(liked))
-        # Split localization into its actual genre and language components so the
-        # two controls directly affect the proposed localized model.
         genre = min_max_normalize(
             self.engine._genre_onehot @ build_genre_weight_vector(list(profile.genres))
         )
@@ -310,8 +289,8 @@ class RecommenderService:
         self,
         user_id: int,
         model: str,
-        manual_ratings: Optional[list[dict]] = None,
-        weights: Optional[dict] = None,
+        manual_ratings: list[dict] | None = None,
+        weights: dict | None = None,
         k: int = 10,
     ) -> tuple[list[dict], dict[str, float]]:
         if model not in MODEL_NAMES:
@@ -368,15 +347,7 @@ class RecommenderService:
     def live_metrics(
         self, user_id: int, recommendations: list[dict]
     ) -> dict[str, float]:
-        """Cheap, request-time signals only.
-
-        Precision@10 / Recall@10 / NDCG@10 are deliberately NOT computed here:
-        a single synthetic user has only 1-5 true holdout-positive movies, and
-        this ranks against the *entire* catalogue (no negative sampling), so a
-        per-request value is almost always 0.0000 and misleading in a live demo.
-        Those accuracy metrics are reported properly, with adequate sample size
-        and significance testing, on the precomputed RQ1 metrics page instead.
-        """
+        """Cheap, request-time signals only."""
         profile = self.get_user_profile(user_id)
         if profile is None:
             return {}
@@ -402,7 +373,7 @@ class RecommenderService:
             "novelty": round(outside_profile / max(len(recommendations), 1), 4),
         }
 
-    def get_user_metrics(self, user_id: int, model: str) -> Optional[dict]:
+    def get_user_metrics(self, user_id: int, model: str) -> dict | None:
         """Return the reproducible precomputed metric for legacy RQ pages."""
         df = self.user_level_metrics
         if df is None:
@@ -428,7 +399,7 @@ class RecommenderService:
         }
 
 
-_service: Optional[RecommenderService] = None
+_service: RecommenderService | None = None
 
 
 def get_service() -> RecommenderService:

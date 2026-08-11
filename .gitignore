@@ -28,6 +28,7 @@ data/processed/*.parquet
 data/processed/*.pkl
 data/processed/*.npy
 data/processed/*.npz
+data/processed/*.json
 
 
 *.db
@@ -47,6 +48,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 .DS_Store
 .AppleDouble

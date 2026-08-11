@@ -4,12 +4,11 @@ import ast
 import logging
 import os
 import re
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-from .mappings import map_genre, map_language, UNKNOWN_GENRE_LABEL
+from .mappings import UNKNOWN_GENRE_LABEL, map_genre, map_language
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +61,7 @@ def parse_tmdb_genre_names(genre_str: str) -> list[str]:
     try:
         genres = ast.literal_eval(genre_str)
         return [g["name"] for g in genres if "name" in g]
-    except ValueError, SyntaxError, TypeError:
+    except (ValueError, SyntaxError, TypeError):
         return []
 
 
@@ -94,7 +93,7 @@ def clean_overview_text(overview: object) -> str:
     return text.strip()
 
 
-def extract_release_year(date_str: object) -> Optional[int]:
+def extract_release_year(date_str: object) -> int | None:
 
     if not isinstance(date_str, str) or len(date_str) < 4:
         return None
@@ -228,7 +227,7 @@ def build_unified_catalog() -> pd.DataFrame:
 
     before_floor = len(catalog)
     vote_floor = catalog["language"].map(
-        lambda lang: LANGUAGE_VOTE_FLOOR.get(lang, DEFAULT_VOTE_FLOOR)  # type: ignore
+        lambda lang: LANGUAGE_VOTE_FLOOR.get(lang, DEFAULT_VOTE_FLOOR)
     )
     catalog = catalog[
         (catalog["vote_count"] >= vote_floor)
@@ -314,8 +313,13 @@ def clean_ratings_and_remove_orphans(
     chunks = []
     for chunk in pd.read_csv(
         ratings_path,
-        usecols=["userId", "movieId", "rating"],
-        dtype={"userId": np.int32, "movieId": np.int32, "rating": np.float32},
+        usecols=["userId", "movieId", "rating", "timestamp"],
+        dtype={
+            "userId": np.int32,
+            "movieId": np.int32,
+            "rating": np.float32,
+            "timestamp": np.int64,
+        },
         chunksize=RATINGS_CHUNK_SIZE,
     ):
         chunks.append(chunk)
@@ -327,7 +331,7 @@ def clean_ratings_and_remove_orphans(
     logger.info("Removed %d duplicate ratings.", before - len(ratings_df))
 
     valid_movie_ids = set(catalog_df["movieId"].unique())
-    ratings_df = ratings_df[ratings_df["movieId"].isin(valid_movie_ids)]
+    ratings_df = ratings_df[ratings_df["movieId"].isin(list(valid_movie_ids))]
     logger.info(
         "Dropped orphan ratings (movies without a catalog entry). Remaining: %d",
         len(ratings_df),
@@ -402,6 +406,15 @@ def validate_ratings_final(ratings_df: pd.DataFrame) -> None:
             "ratings_final.csv contains rating values outside the valid "
             "MovieLens range [0.5, 5.0], which indicates corrupted data."
         )
+
+    if "timestamp" not in ratings_df.columns:
+        raise ValueError(
+            "ratings_final.csv is missing the timestamp column. It is required "
+            "for temporal splitting in build_real_cohort.py."
+        )
+
+    if ratings_df["timestamp"].isna().any():
+        raise ValueError("ratings_final.csv contains null timestamp values.")
 
 
 def main() -> None:

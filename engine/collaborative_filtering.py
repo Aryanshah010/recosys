@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 PROCESSED_DIR = "data/processed"
 RATINGS_PATH = os.path.join(PROCESSED_DIR, "ratings_final.csv")
 MODEL_PATH = os.path.join(PROCESSED_DIR, "svd_model.pkl")
+EXCLUDED_USER_IDS_PATH = os.path.join(PROCESSED_DIR, "cf_excluded_user_ids.json")
 
 REQUIRED_RATING_COLUMNS = ["userId", "movieId", "rating"]
 RATING_SCALE = (0.5, 5.0)
@@ -71,6 +73,22 @@ def load_ratings(path: str = RATINGS_PATH) -> pd.DataFrame:
     return ratings_df
 
 
+def load_excluded_user_ids(path: str = EXCLUDED_USER_IDS_PATH) -> set[int]:
+    """Users held out of CF training."""
+    if not os.path.exists(path):
+        logger.warning(
+            "No %s found -- training on all users. Run build_real_cohort.py "
+            "first if you intend to evaluate on the real proxy cohort.",
+            path,
+        )
+        return set()
+
+    with open(path) as fh:
+        excluded = {int(u) for u in json.load(fh)}
+    logger.info("Loaded %d user ids to exclude from CF training.", len(excluded))
+    return excluded
+
+
 def build_surprise_dataset(ratings_df: pd.DataFrame) -> Dataset:
 
     reader = Reader(rating_scale=RATING_SCALE)
@@ -89,7 +107,7 @@ def train_svd_model(data: Dataset) -> SVD:
         RANDOM_STATE,
     )
 
-    trainset: Trainset = data.build_full_trainset()  # type: ignore
+    trainset: Trainset = data.build_full_trainset()
     algo = SVD(
         n_factors=N_FACTORS,
         n_epochs=N_EPOCHS,
@@ -165,6 +183,20 @@ def main() -> None:
     logger.info("Starting collaborative_filtering.py pipeline...")
 
     ratings_df = load_ratings()
+
+    excluded = load_excluded_user_ids()
+    if excluded:
+        before = len(ratings_df)
+        ratings_df = ratings_df[~ratings_df["userId"].isin(list(excluded))]
+        logger.info(
+            "Excluded %d evaluation-cohort users: %d -> %d ratings.",
+            len(excluded),
+            before,
+            len(ratings_df),
+        )
+        if ratings_df.empty:
+            raise ValueError("Excluding evaluation users emptied the trainset.")
+
     data = build_surprise_dataset(ratings_df)
     algo = train_svd_model(data)
     validate_model(algo)

@@ -24,6 +24,9 @@ CBF_METADATA_PATH = os.path.join(PROCESSED_DIR, "cbf_metadata.pkl")
 TFIDF_NGRAM_RANGE = (1, 2)
 TFIDF_STOP_WORDS = "english"
 TFIDF_MIN_DF = 2
+TFIDF_MAX_FEATURES = 60_000
+
+GENRE_SOUP_REPEATS = 3
 
 BAYESIAN_MIN_VOTES_QUANTILE = 0.25
 
@@ -78,14 +81,38 @@ def load_movies_final(path: str = MOVIES_FINAL_PATH) -> pd.DataFrame:
 
 
 def build_content_soup(movies_df: pd.DataFrame) -> pd.Series:
+    """Combine canonical genres with TMDB synopsis text."""
 
     genres = (
         movies_df["clean_genres"]
         .fillna("")
         .astype(str)
         .str.replace("|", " ", regex=False)
+        .str.strip()
     )
-    soup = genres.str.strip()
+
+    overview = (
+        movies_df["overview"]
+        .fillna("")
+        .astype(str)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+    soup = (
+        ((genres + " ") * GENRE_SOUP_REPEATS + overview)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+    n_with_overview = int(overview.str.len().gt(0).sum())
+    logger.info(
+        "Content soup: %d/%d movies have non-empty overview text "
+        "(genre tokens repeated %dx).",
+        n_with_overview,
+        len(movies_df),
+        GENRE_SOUP_REPEATS,
+    )
 
     empty_count = int(soup.str.len().eq(0).sum())
     if empty_count > 0:
@@ -164,6 +191,8 @@ def build_tfidf_matrix(soup: pd.Series) -> tuple[csr_matrix, TfidfVectorizer]:
         ngram_range=TFIDF_NGRAM_RANGE,
         stop_words=TFIDF_STOP_WORDS,
         min_df=TFIDF_MIN_DF,
+        max_features=TFIDF_MAX_FEATURES,
+        sublinear_tf=True,
         dtype=np.float32,
     )
     matrix = csr_matrix(vectorizer.fit_transform(soup))

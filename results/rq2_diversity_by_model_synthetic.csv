@@ -1,0 +1,7 @@
+Model,Language_Diversity,Genre_Diversity,Filter_Bubble_Score,Novelty@10
+Popularity,3.478,9.955,0.528,0.472
+CF_ColdStart,2.458,10.018,0.701,0.299
+CBF,2.74,8.348,0.825,0.175
+Affinity_Only,1.028,7.878,1.0,0.0
+NonLocal_Hybrid,2.418,9.238,0.853,0.146
+Localized_Hybrid,1.548,9.175,0.984,0.016

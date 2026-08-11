@@ -1,22 +1,26 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from .collaborative_filtering import load_model, MODEL_PATH
-from .content_filter import ContentBasedFilter, CBF_MATRIX_PATH, CBF_METADATA_PATH
 from src.localization_config import (
-    LOCALIZATION_GENRE_WEIGHT,
-    LOCALIZATION_LANGUAGE_WEIGHT,
-    STANDARD_HYBRID_WEIGHTS,
+    AFFINITY_ONLY_WEIGHTS,
+    COHORT_GENRE_COMPONENT,
+    COHORT_LANGUAGE_COMPONENT,
     LOCALIZED_HYBRID_WEIGHTS,
-    build_genre_weight_vector,
+    STANDARD_HYBRID_WEIGHTS,
     build_genre_onehot_from_list,
+    build_genre_weight_vector,
+    compute_genre_affinity_scores,
     compute_language_preference_scores,
 )
+
+from .collaborative_filtering import MODEL_PATH, load_model
+from .content_filter import CBF_MATRIX_PATH, CBF_METADATA_PATH, ContentBasedFilter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,7 +99,9 @@ class HybridRecommender:
                 continue
         return inner
 
-    def get_cf_scores(self, user_id: int, liked_movie_ids: list[int] | None = None) -> np.ndarray:
+    def get_cf_scores(
+        self, user_id: int, liked_movie_ids: list[int] | None = None
+    ) -> np.ndarray:
 
         trainset = self.cf_algo.trainset
         global_mean = trainset.global_mean
@@ -115,22 +121,20 @@ class HybridRecommender:
         except ValueError:
             if not liked_movie_ids:
                 return scores
-            
+
             bi = self.cf_algo.bi[valid_inner_iids]
             qi = self.cf_algo.qi[valid_inner_iids]
-            
+
             train_inner_iids = []
             for mid in liked_movie_ids:
-                try:
+                with contextlib.suppress(ValueError):
                     train_inner_iids.append(trainset.to_inner_iid(mid))
-                except ValueError:
-                    pass
-            
+
             if not train_inner_iids:
                 p_hat = np.zeros(qi.shape[1], dtype=np.float32)
             else:
                 p_hat = self.cf_algo.qi[train_inner_iids].mean(axis=0)
-                
+
             scores[valid_mask] = global_mean + bi + qi @ p_hat
             return scores.astype(np.float32)
 
@@ -138,9 +142,11 @@ class HybridRecommender:
         return self.cbf.get_content_scores(liked_movie_ids)
 
     def get_localization_scores(self, profile: UserProfile) -> np.ndarray:
-
+        """Cohort-affinity score for every catalogue title."""
         genre_vec = build_genre_weight_vector(list(profile.genres))
-        genre_score = min_max_normalize(self._genre_onehot @ genre_vec)
+        genre_score = min_max_normalize(
+            compute_genre_affinity_scores(self._genre_onehot, genre_vec)
+        )
 
         lang_score = min_max_normalize(
             compute_language_preference_scores(
@@ -149,8 +155,14 @@ class HybridRecommender:
         )
 
         return (
-            LOCALIZATION_GENRE_WEIGHT * genre_score
-            + LOCALIZATION_LANGUAGE_WEIGHT * lang_score
+            COHORT_GENRE_COMPONENT * genre_score
+            + COHORT_LANGUAGE_COMPONENT * lang_score
+        ).astype(np.float32)
+
+    def get_affinity_only_scores(self, profile: UserProfile) -> np.ndarray:
+        """Ablation: cohort affinity with no CF or CBF contribution."""
+        return (
+            AFFINITY_ONLY_WEIGHTS.localization * self.get_localization_scores(profile)
         ).astype(np.float32)
 
     def get_standard_hybrid_scores(

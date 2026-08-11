@@ -11,12 +11,8 @@ Base = declarative_base()
 
 
 def ensure_schema() -> None:
-    """Create new tables and add only missing columns to the demo SQLite file.
-
-    This lightweight migration keeps the original thesis database usable without
-    introducing a migration framework that would be unnecessary for the project.
-    """
-    from api import models  # Import models only after Base exists.
+    """Create new tables and add only missing columns to the demo SQLite file."""
+    from api import models
 
     models.Base.metadata.create_all(bind=engine)
     additions = {

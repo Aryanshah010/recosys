@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-
 from typing import cast
 
 import joblib
@@ -140,7 +139,7 @@ def main() -> None:
     demo_liked = [
         1,
         2571,
-    ]  # Toy Story
+    ]
     recs = engine.recommend(demo_liked, k=10)
 
     print(f"\nContent-based recommendations for liked={demo_liked}:")

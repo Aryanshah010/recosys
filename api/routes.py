@@ -119,8 +119,6 @@ def _generate(db: Session, payload: GenerationRequest, trigger: str) -> dict:
     db.flush()
     results, metrics, applied_weights = {}, {}, {}
     for model in MODELS:
-        # Weights are fixed research configuration (see src/localization_config.py);
-        # they are not user-adjustable in the UI.
         recs, applied = svc.recommend(payload.user_id, model, manual, None)
         applied_weights[model] = applied
         live = svc.live_metrics(payload.user_id, recs)
@@ -178,9 +176,6 @@ def _generate(db: Session, payload: GenerationRequest, trigger: str) -> dict:
 
 ARCHETYPES = ("hollywood", "anime", "bollywood", "kdrama", "mixed")
 USERS_PER_ARCHETYPE = 4
-# Optional: pin specific user ids you've verified demo well (e.g. a "mixed"
-# user with a clearly low filter-bubble score, or one where Localized Hybrid
-# visibly beats Standard Hybrid). Leave empty to skip this section.
 FEATURED_USER_IDS: list[int] = []
 
 
@@ -191,9 +186,6 @@ def landing(request: Request, db: Session = Depends(get_db)):
         if FEATURED_USER_IDS
         else []
     )
-    # Grouped (not a flat list) so every archetype is visibly represented,
-    # including the smaller "mixed" segment, and the cohort's stratified
-    # design is legible straight from the landing page.
     groups = [
         {
             "archetype": archetype,

@@ -1,6 +1,7 @@
 import argparse
 
 import pandas as pd
+
 from api.db import SessionLocal, ensure_schema
 from api.models import Movie, SyntheticUser
 

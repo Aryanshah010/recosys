@@ -15,6 +15,4 @@ app.include_router(router)
 @app.on_event("startup")
 def initialise_demo_database() -> None:
     ensure_schema()
-    # Force the heavy SVD/CBF/cohort load to happen now, once, in the
-    # terminal — rather than silently on whichever page a user opens first.
     get_service()

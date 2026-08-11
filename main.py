@@ -1,15 +1,8 @@
-"""
-Single entry point that executes the full sequential pipeline:
-1. Data Cleaning & ETL (MovieLens + TMDb fusion)
-2. CBF Matrix Generation (TF-IDF + Cosine Similarity)
-3. Synthetic Cohort Generation (Nepali IT Male Students)
-4. Collaborative Filtering Training (SVD on MovieLens real ratings only)
-5. Master Evaluation (synthetic support/holdout + bias metrics)
-"""
+"""Single entry point that executes the full sequential pipeline: 1."""
 
+import os
 import subprocess
 import sys
-import os
 import time
 from pathlib import Path
 
@@ -23,27 +16,38 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 PIPELINE_STEPS = [
     (
         SRC_DIR / "clean_data.py",
-        "Step 1/5: Data Cleaning & ETL (MovieLens + TMDb Fusion)",
+        "Step 1/6: Data Cleaning & ETL (MovieLens + TMDb Fusion)",
         ["movies_final.csv", "ratings_final.csv"],
     ),
     (
         SRC_DIR / "build_cbf_matrix.py",
-        "Step 2/5: Building CBF Matrix (TF-IDF + Cosine Similarity)",
+        "Step 2/6: Building CBF Matrix (TF-IDF over genres + synopses)",
         ["cbf_matrix.pkl", "cbf_metadata.pkl"],
     ),
     (
+        SRC_DIR / "build_real_cohort.py",
+        "Step 3/6: Selecting Real Proxy Cohort + Deriving Affinity Tables",
+        [
+            "real_cohort_users.csv",
+            "real_cohort_ratings.csv",
+            "cf_excluded_user_ids.json",
+            "archetype_affinity.pkl",
+            "cohort_affinity_tables.json",
+        ],
+    ),
+    (
         SRC_DIR / "generate_synthetic_cohort.py",
-        "Step 3/5: Generating Synthetic Nepali IT Male Cohort",
+        "Step 4/6: Generating Synthetic Cohort (behaviour-seeded)",
         ["synthetic_users.csv", "synthetic_ratings.csv"],
     ),
     (
         ENGINE_DIR / "collaborative_filtering.py",
-        "Step 4/5: Training SVD CF Model (MovieLens real ratings only)",
+        "Step 5/6: Training SVD CF Model (evaluation cohort excluded)",
         ["svd_model.pkl"],
     ),
     (
         EVALUATION_DIR / "evaluation_metrics.py",
-        "Step 5/5: Running Master Evaluation (Synthetic Support/Holdout)",
+        "Step 6/6: Master Evaluation (real + synthetic tracks)",
         ["evaluation_user_level.csv"],
     ),
 ]
