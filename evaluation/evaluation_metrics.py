@@ -152,13 +152,13 @@ def build_holdout_split(
             .tolist()
         )
         if len(holdout_pos) >= MIN_HOLDOUT_POS and train_pos:
-            splits[int(uid)] = (train_ids, train_pos, holdout_pos) # pyright: ignore[reportArgumentType]
+            splits[int(uid)] = (train_ids, train_pos, holdout_pos)  # pyright: ignore[reportArgumentType]
     return splits
 
 
 def build_popularity_bins(quality: np.ndarray) -> np.ndarray:
     """Assign each catalogue item to a popularity decile."""
-    ranks = stats.rankdata(quality, method="average") / max(len(quality), 1) # pyright: ignore[reportAttributeAccessIssue]
+    ranks = stats.rankdata(quality, method="average") / max(len(quality), 1)  # pyright: ignore[reportAttributeAccessIssue]
     return np.clip((ranks * N_POPULARITY_BINS).astype(int), 0, N_POPULARITY_BINS - 1)
 
 
@@ -579,13 +579,13 @@ def report_significance(df: pd.DataFrame, track: str) -> None:
 
         t_stat = p_t = d = float("nan")
         if n > 1 and diff.std(ddof=1) > 0:
-            t_stat, p_t = stats.ttest_rel(xa, xb) # pyright: ignore[reportAttributeAccessIssue]
+            t_stat, p_t = stats.ttest_rel(xa, xb)  # pyright: ignore[reportAttributeAccessIssue]
             d = float(diff.mean() / diff.std(ddof=1))
 
         p_w = float("nan")
         if np.any(diff != 0):
             with contextlib.suppress(ValueError):
-                _, p_w = stats.wilcoxon(xa, xb, zero_method="wilcox") # pyright: ignore[reportAttributeAccessIssue]
+                _, p_w = stats.wilcoxon(xa, xb, zero_method="wilcox")  # pyright: ignore[reportAttributeAccessIssue]
 
         rows.append(
             {
@@ -630,8 +630,8 @@ def report_confidence_intervals(df: pd.DataFrame, track: str) -> None:
             if len(vals) < 2:
                 continue
             mean = float(vals.mean())
-            sem = float(stats.sem(vals)) # pyright: ignore[reportAttributeAccessIssue]
-            lo, hi = stats.t.interval(0.95, len(vals) - 1, loc=mean, scale=sem) # type: ignore
+            sem = float(stats.sem(vals))  # pyright: ignore[reportAttributeAccessIssue]
+            lo, hi = stats.t.interval(0.95, len(vals) - 1, loc=mean, scale=sem)  # type: ignore
             rows.append(
                 {
                     "Metric": metric,

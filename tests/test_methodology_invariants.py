@@ -175,7 +175,26 @@ def test_cohort_spec_is_internally_consistent():
     reason="pipeline artifacts not built",
 )
 def test_nepali_catalogue_scarcity_is_still_true():
-    """Pin the finding that motivates the audience-localization reframe."""
+    """Pin the finding that motivates the audience-localization reframe.
+
+    This guard encodes a deliberate scope decision, not merely an observed data
+    fact. Supplementing the catalogue with Nepali titles from the TMDB API was
+    considered and rejected, because it could not produce a measurable result:
+
+      1. No cohort user prefers Nepali (0 of 400 real, 0 of 400 synthetic).
+         Preferences are inferred from observed consumption, and there is no
+         Nepali consumption in MovieLens to infer from.
+      2. No MovieLens rating exists for any Nepali film, so an added title can
+         never be a held-out positive - only a negative-pool distractor. Adding
+         titles cannot raise HR/NDCG/MRR; it can only leave them flat or lower
+         them through new false positives.
+      3. Language affinity is estimated as consumption *lift*, so Nepali stays
+         pinned at the 0.25 floor however much catalogue is added. Adding rows
+         does not create consumption.
+
+    So do not "fix" this test by adding Nepali titles. Doing so would weaken the
+    catalogue's quality floor without making any new claim testable.
+    """
     movies = pd.read_csv(PROCESSED / "movies_final.csv", usecols=["language"])
     n_nepali = int((movies["language"] == "Nepali").sum())
     assert n_nepali < 10, (

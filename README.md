@@ -81,7 +81,7 @@ Then:
 
 ```bash
 python -m evaluation.sensitivity_analysis   # λ sweep + archetype-mix robustness
-python -m evaluation.make_figures           # RQ1/RQ2 figures
+python -m evaluation.make_figures           # all 12 figures (descriptive + RQ1/RQ2)
 uvicorn api.main:app --reload               # demo UI
 ```
 
@@ -136,7 +136,8 @@ api/        FastAPI demo (dashboard, profile, metrics, bias pages)
 tests/      methodological invariants
 notebooks/  exploratory data analysis and processed-data validation
 results/    generated tables and figures
-archive/    superseded material, not used by the project (see archive/README.md)
+            _archive_precircularity_fix/  INVALID pre-fix results, retained only
+            so the correction is auditable — see its README, do not cite
 ```
 
 ## Quality gates
@@ -166,6 +167,10 @@ from the train split alone.
   language set were chosen because the users are Nepali/male/IT/19–26. Age,
   gender and education are recorded but are not per-user model features.
 
-See `CHANGES_AND_FLAWS.md` for the full audit: defects found in the original
-implementation, what was changed, all current results, and remaining
-limitations.
+- The catalogue holds one Nepali title in 17,112, so no claim about
+  Nepali-content surfacing is testable here. Supplementing it was ruled out: no
+  cohort user prefers Nepali, no rating exists for any Nepali film so a title
+  can never be a held-out positive, and language affinity is estimated as
+  consumption lift, which pins Nepali at the floor at any catalogue size.
+- All results are offline. Ranking gains are well known not to transfer
+  reliably to user-perceived quality without online validation.

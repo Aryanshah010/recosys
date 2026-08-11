@@ -227,7 +227,7 @@ def build_unified_catalog() -> pd.DataFrame:
 
     before_floor = len(catalog)
     vote_floor = catalog["language"].map(
-        lambda lang: LANGUAGE_VOTE_FLOOR.get(lang, DEFAULT_VOTE_FLOOR)
+        lambda lang: LANGUAGE_VOTE_FLOOR.get(lang, DEFAULT_VOTE_FLOOR)  # type: ignore
     )
     catalog = catalog[
         (catalog["vote_count"] >= vote_floor)

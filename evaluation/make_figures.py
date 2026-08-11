@@ -19,6 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 RESULTS_DIR = "results"
+PROCESSED_DIR = os.path.join("data", "processed")
 FIG_DIR = os.path.join(RESULTS_DIR, "figures")
 
 MODEL_ORDER = [
@@ -67,6 +68,81 @@ def _read(path: str) -> pd.DataFrame | None:
         logger.warning("Missing %s; skipping.", full)
         return None
     return pd.read_csv(full)
+
+
+def _read_processed(name: str, **kwargs) -> pd.DataFrame | None:
+    full = os.path.join(PROCESSED_DIR, name)
+    if not os.path.exists(full):
+        logger.warning("Missing %s; skipping.", full)
+        return None
+    return pd.read_csv(full, **kwargs)
+
+
+def fig_rating_distribution(idx: int) -> None:
+    """Descriptive: how the cleaned MovieLens ratings are distributed."""
+    df = _read_processed("ratings_final.csv", usecols=["rating"])
+    if df is None:
+        return
+
+    fig, ax = plt.subplots(figsize=(9, 4.6))
+    counts = df["rating"].value_counts().sort_index()
+    ax.bar(counts.index, counts.to_numpy(dtype=float), width=0.4, color="#6f9bd1")
+
+    ax.set_xlabel("Rating")
+    ax.set_ylabel("Number of ratings")
+    ax.set_title(
+        f"Distribution of the {len(df):,} cleaned MovieLens ratings",
+        fontsize=12,
+        fontweight="bold",
+    )
+    _save(fig, f"{idx:02d}_rating_distribution.png")
+
+
+def fig_genre_popularity(idx: int) -> None:
+    """Descriptive: catalogue composition by canonical genre."""
+    df = _read_processed("movies_final.csv", usecols=["clean_genres"])
+    if df is None:
+        return
+
+    counts = df["clean_genres"].str.split("|").explode().value_counts().head(15)
+
+    fig, ax = plt.subplots(figsize=(9, 5.4))
+    ax.barh(counts.index[::-1], counts.to_numpy(dtype=float)[::-1], color="#63a088")
+
+    ax.set_xlabel("Number of titles")
+    ax.set_title(
+        "Catalogue composition — 15 most common genres",
+        fontsize=12,
+        fontweight="bold",
+    )
+    _save(fig, f"{idx:02d}_genre_popularity.png")
+
+
+def fig_language_distribution(idx: int) -> None:
+    """Descriptive: the catalogue's language skew, which motivates the study."""
+    df = _read_processed("movies_final.csv", usecols=["language"])
+    if df is None:
+        return
+
+    counts = df["language"].value_counts()
+    top = counts.head(12)
+    n_nepali = int(counts.get("Nepali", 0))
+
+    fig, ax = plt.subplots(figsize=(9, 5.0))
+    colors = ["#c8553d" if lang == "English" else "#9aa0a6" for lang in top.index]
+    ax.barh(top.index[::-1], top.to_numpy(dtype=float)[::-1], color=colors[::-1])
+
+    for i, v in enumerate(top.to_numpy(dtype=float)[::-1]):
+        ax.text(v, i, f"  {v / len(df) * 100:.1f}%", va="center", fontsize=8)
+
+    ax.set_xlabel("Number of titles")
+    ax.set_title(
+        f"Catalogue language skew — {counts.get('English', 0) / len(df) * 100:.0f}% "
+        f"English, {n_nepali} Nepali of {len(df):,}",
+        fontsize=12,
+        fontweight="bold",
+    )
+    _save(fig, f"{idx:02d}_language_distribution.png")
 
 
 def fig_model_performance(track: str, idx: int) -> None:
@@ -154,7 +230,7 @@ def fig_bubble_by_archetype(track: str, idx: int) -> None:
             row[archetypes].to_numpy(dtype=float),
             width,
             label=model,
-            color=PALETTE.get(model, "#888"), # type: ignore
+            color=PALETTE.get(model, "#888"),  # type: ignore
         )
 
     ax.set_xticks(x + width * (len(df) - 1) / 2)
@@ -219,7 +295,7 @@ def fig_benchmark_representation(idx: int) -> None:
     df = df.copy()
     df["Target_Share_%"] = df["Archetype"].map(
         lambda a: (
-            ARCHETYPE_BY_NAME[a]["target_share"] * 100 # pyright: ignore[reportArgumentType]
+            ARCHETYPE_BY_NAME[a]["target_share"] * 100  # pyright: ignore[reportArgumentType]
             if a in ARCHETYPE_BY_NAME
             else np.nan
         )
@@ -305,7 +381,14 @@ def fig_track_comparison(idx: int) -> None:
 def main() -> None:
     os.makedirs(FIG_DIR, exist_ok=True)
 
-    idx = 4
+    idx = 1
+    fig_rating_distribution(idx)
+    idx += 1
+    fig_genre_popularity(idx)
+    idx += 1
+    fig_language_distribution(idx)
+    idx += 1
+
     fig_benchmark_representation(idx)
     idx += 1
     fig_track_comparison(idx)

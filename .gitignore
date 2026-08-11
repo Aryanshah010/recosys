@@ -67,3 +67,6 @@ htmlcov/
 .env
 .env.*
 secrets.json
+
+# Local working notes, not part of the deliverable
+CHANGES_AND_FLAWS.md

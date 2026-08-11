@@ -139,7 +139,11 @@ def report_benchmark_population(
         )
     profile = pd.DataFrame(rows)
 
-    english_share = shares["English"] if "English" in shares.columns else pd.Series(0.0, index=shares.index)
+    english_share = (
+        shares["English"]
+        if "English" in shares.columns
+        else pd.Series(0.0, index=shares.index)
+    )
     english_dominant = float((english_share >= 0.85).mean() * 100)
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
