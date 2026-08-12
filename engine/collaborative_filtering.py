@@ -74,7 +74,6 @@ def load_ratings(path: str = RATINGS_PATH) -> pd.DataFrame:
 
 
 def load_excluded_user_ids(path: str = EXCLUDED_USER_IDS_PATH) -> set[int]:
-    """Users held out of CF training."""
     if not os.path.exists(path):
         logger.warning(
             "No %s found -- training on all users. Run build_real_cohort.py "

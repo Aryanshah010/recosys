@@ -1,5 +1,3 @@
-"""Regression guards for the methodological properties the thesis claims."""
-
 from __future__ import annotations
 
 import ast
@@ -34,7 +32,6 @@ def _imported_names(path: Path) -> set[str]:
 
 
 def test_generator_does_not_import_scorer_functions():
-    """The synthetic generator must not share scoring functions with the model."""
     generator = PROJECT_ROOT / "src" / "generate_synthetic_cohort.py"
     leaked = _imported_names(generator) & SCORER_FUNCTIONS
     assert not leaked, (
@@ -44,26 +41,46 @@ def test_generator_does_not_import_scorer_functions():
     )
 
 
-def test_evaluation_imports_constants_rather_than_copying():
-    """Evaluation must not hand-copy weights that live in localization_config."""
-    text = (PROJECT_ROOT / "evaluation" / "evaluation_metrics.py").read_text()
-    assert "from src.localization_config import" in text
+SHARED_CONSTANTS = {
+    "COHORT_GENRE_AFFINITY",
+    "COHORT_LANGUAGE_AFFINITY",
+    "STANDARD_HYBRID_WEIGHTS",
+    "LOCALIZED_HYBRID_WEIGHTS",
+    "AFFINITY_ONLY_WEIGHTS",
+    "COHORT_GENRE_COMPONENT",
+    "COHORT_LANGUAGE_COMPONENT",
+}
+
+CONSUMER_MODULES = [
+    Path("evaluation") / "evaluation_metrics.py",
+    Path("evaluation") / "sensitivity_analysis.py",
+    Path("engine") / "hybrid_fusion.py",
+    Path("api") / "recommender_service.py",
+]
+
+
+@pytest.mark.parametrize("relative", CONSUMER_MODULES, ids=lambda p: p.name)
+def test_consumers_import_constants_rather_than_copying(relative: Path):
+    text = (PROJECT_ROOT / relative).read_text()
+    assert "localization_config import" in text, (
+        f"{relative} does not import from localization_config."
+    )
 
     tree = ast.parse(text)
     redefined = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id in {
-                    "COHORT_GENRE_AFFINITY",
-                    "COHORT_LANGUAGE_AFFINITY",
-                    "STANDARD_HYBRID_WEIGHTS",
-                    "LOCALIZED_HYBRID_WEIGHTS",
-                }:
+                if isinstance(target, ast.Name) and target.id in SHARED_CONSTANTS:
                     redefined.add(target.id)
-    assert not redefined, (
-        f"evaluation_metrics.py re-defines imported constants: {redefined}"
-    )
+    assert not redefined, f"{relative} re-defines imported constants: {redefined}"
+
+    for literal in ("0.625", "0.375"):
+        assert literal not in text, (
+            f"{relative} hard-codes the hybrid weight {literal} instead of "
+            "importing STANDARD_HYBRID_WEIGHTS. A future reweighting would then "
+            "silently desynchronise this module from the evaluated model."
+        )
 
 
 @pytest.mark.skipif(
@@ -71,7 +88,6 @@ def test_evaluation_imports_constants_rather_than_copying():
     reason="pipeline artifacts not built",
 )
 def test_evaluation_cohort_excluded_from_cf_training():
-    """No real-cohort user may appear in the SVD trainset."""
     from surprise import dump
 
     with open(PROCESSED / "cf_excluded_user_ids.json") as fh:
@@ -96,7 +112,6 @@ def test_evaluation_cohort_excluded_from_cf_training():
     reason="pipeline artifacts not built",
 )
 def test_inferred_preferences_use_train_split_only():
-    """Preferences must be derivable from the train split alone."""
     ratings = pd.read_csv(PROCESSED / "real_cohort_ratings.csv")
     users = pd.read_csv(PROCESSED / "real_cohort_users.csv")
 
@@ -115,7 +130,6 @@ def test_inferred_preferences_use_train_split_only():
     reason="pipeline artifacts not built",
 )
 def test_temporal_split_is_actually_temporal():
-    """Every holdout item must be no earlier than the user's latest train item."""
     ratings = pd.read_csv(PROCESSED / "real_cohort_ratings.csv")
     assert "timestamp" in ratings.columns
 
@@ -144,7 +158,6 @@ def test_no_duplicate_user_item_pairs():
 
 
 def test_hybrid_weight_presets_are_convex_and_comparable():
-    """The two hybrids must differ only by the affinity term."""
     from src.localization_config import (
         AFFINITY_ONLY_WEIGHTS,
         LOCALIZED_HYBRID_WEIGHTS,
@@ -162,6 +175,45 @@ def test_hybrid_weight_presets_are_convex_and_comparable():
     )
 
 
+@pytest.mark.skipif(
+    not (PROCESSED / "svd_model.pkl").exists(),
+    reason="pipeline artifacts not built",
+)
+def test_served_model_matches_evaluated_model():
+    import numpy as np
+
+    from api.recommender_service import EVALUATION_MODEL_NAMES, get_service
+
+    svc = get_service()
+    user_id = int(svc.users_df["userId"].iloc[0])
+    liked = svc._liked_movie_ids(user_id, [])
+    profile = svc._profile_obj(user_id)
+
+    expected = {
+        "popularity": svc.engine.get_popularity_scores(),
+        "cf": svc.engine.get_cf_scores(user_id, liked),
+        "cbf": svc.engine.get_cbf_scores(liked),
+        "affinity": svc.engine.get_affinity_only_scores(profile),
+        "hybrid": svc.engine.get_standard_hybrid_scores(user_id, liked),
+        "localized": svc.engine.get_localized_hybrid_scores(user_id, liked, profile),
+    }
+
+    assert set(expected) == set(EVALUATION_MODEL_NAMES), (
+        "The demo model set has drifted from the evaluated model set."
+    )
+
+    for model, reference in expected.items():
+        served = svc._model_scores(model, user_id, liked, profile)
+        assert np.allclose(served, reference), (
+            f"Demo model '{model}' ({EVALUATION_MODEL_NAMES[model]}) does not "
+            "match engine/hybrid_fusion.py. Note this pins demo == engine, NOT "
+            "engine == evaluation harness: the harness scores a sampled "
+            "candidate set and normalises over it, so its rankings are close "
+            "but not identical. What both share is the weights and affinity "
+            "tables, pinned by test_consumers_import_constants_rather_than_copying."
+        )
+
+
 def test_cohort_spec_is_internally_consistent():
     from src.cohort_spec import ARCHETYPE_SPECS, target_counts
 
@@ -170,31 +222,106 @@ def test_cohort_spec_is_internally_consistent():
     assert sum(counts.values()) == 400
 
 
+def test_television_is_not_a_genre():
+    from src.mappings import CANONICAL_GENRE_MAP, CANONICAL_GENRES
+
+    assert "TV" not in CANONICAL_GENRES, (
+        "'TV' is a canonical genre again. This is a movie recommender; TMDB's "
+        "'TV Movie' must fall through to 'Other' rather than becoming a "
+        "user-visible label."
+    )
+    assert "TV Movie" not in CANONICAL_GENRE_MAP, (
+        "TMDB's 'TV Movie' genre is being mapped in again."
+    )
+
+
+@pytest.mark.skipif(
+    not (PROCESSED / "movies_final.csv").exists(),
+    reason="pipeline artifacts not built",
+)
+def test_catalogue_contains_no_television():
+    movies = pd.read_csv(
+        PROCESSED / "movies_final.csv", usecols=["movieId", "tmdbId", "clean_genres"]
+    )
+
+    tagged = (
+        movies["clean_genres"].astype(str).str.split("|").apply(lambda g: "TV" in g)
+    )
+    assert not tagged.any(), (
+        f"{int(tagged.sum())} catalogue titles carry a 'TV' genre token."
+    )
+
+    exclusions_path = PROCESSED / "television_exclusions.json"
+    if not exclusions_path.exists():
+        pytest.skip("television_exclusions.json not present")
+
+    with open(exclusions_path) as fh:
+        excluded = {int(t) for t in json.load(fh)["excluded_tmdb_ids"]}
+
+    leaked = movies[movies["tmdbId"].isin(excluded)]
+    assert leaked.empty, (
+        f"{len(leaked)} titles TMDB classifies as television survived into the "
+        f"catalogue, e.g. tmdbId {leaked['tmdbId'].head(5).tolist()}. "
+        "Is drop_television() still wired into build_unified_catalog()?"
+    )
+
+
+@pytest.mark.skipif(
+    not (PROCESSED / "real_cohort_ratings.csv").exists(),
+    reason="pipeline artifacts not built",
+)
+def test_archetype_labels_do_not_use_holdout_data():
+    
+    from src.cohort_spec import LIKE_THRESHOLD, label_from_language_shares
+
+    ratings = pd.read_csv(PROCESSED / "real_cohort_ratings.csv")
+    users = pd.read_csv(PROCESSED / "real_cohort_users.csv")
+    movies = pd.read_csv(
+        PROCESSED / "movies_final.csv", usecols=["movieId", "language"]
+    )
+    language_by_movie = dict(zip(movies["movieId"], movies["language"]))
+
+    liked_train = ratings[
+        (ratings["split"] == "train") & (ratings["rating"] >= LIKE_THRESHOLD)
+    ].copy()
+    liked_train["language"] = liked_train["movieId"].map(language_by_movie)
+
+    counts = pd.crosstab(liked_train["userId"], liked_train["language"])
+    shares = counts.div(counts.sum(axis=1), axis=0)
+
+    stored = dict(zip(users["userId"], users["archetype"]))
+    mismatched = [
+        uid
+        for uid, row in shares.iterrows()
+        if uid in stored and label_from_language_shares(row.to_dict()) != stored[uid] # type: ignore
+    ]
+
+    ratio = len(mismatched) / max(len(stored), 1)
+    assert ratio < 0.05, (
+        f"{len(mismatched)} of {len(stored)} archetype labels ({ratio:.1%}) are "
+        "not reproducible from the train split. Cohort selection is reading "
+        "holdout data -- see the train_mask() call in build_real_cohort.main()."
+    )
+
+
+def test_sensitivity_mixes_match_the_archetype_spec():
+    from evaluation.sensitivity_analysis import ALTERNATIVE_MIXES
+    from src.cohort_spec import ARCHETYPE_NAMES
+
+    for name, mix in ALTERNATIVE_MIXES.items():
+        assert set(mix) == set(ARCHETYPE_NAMES), (
+            f"Sensitivity mix '{name}' has keys {sorted(set(mix))}, but the "
+            f"cohort spec defines {sorted(ARCHETYPE_NAMES)}. Renaming an "
+            "archetype silently desynchronises the sweep."
+        )
+        assert abs(sum(mix.values()) - 1.0) < 1e-6, f"Mix '{name}' must sum to 1.0."
+
+
 @pytest.mark.skipif(
     not (PROCESSED / "movies_final.csv").exists(),
     reason="pipeline artifacts not built",
 )
 def test_nepali_catalogue_scarcity_is_still_true():
-    """Pin the finding that motivates the audience-localization reframe.
-
-    This guard encodes a deliberate scope decision, not merely an observed data
-    fact. Supplementing the catalogue with Nepali titles from the TMDB API was
-    considered and rejected, because it could not produce a measurable result:
-
-      1. No cohort user prefers Nepali (0 of 400 real, 0 of 400 synthetic).
-         Preferences are inferred from observed consumption, and there is no
-         Nepali consumption in MovieLens to infer from.
-      2. No MovieLens rating exists for any Nepali film, so an added title can
-         never be a held-out positive - only a negative-pool distractor. Adding
-         titles cannot raise HR/NDCG/MRR; it can only leave them flat or lower
-         them through new false positives.
-      3. Language affinity is estimated as consumption *lift*, so Nepali stays
-         pinned at the 0.25 floor however much catalogue is added. Adding rows
-         does not create consumption.
-
-    So do not "fix" this test by adding Nepali titles. Doing so would weaken the
-    catalogue's quality floor without making any new claim testable.
-    """
     movies = pd.read_csv(PROCESSED / "movies_final.csv", usecols=["language"])
     n_nepali = int((movies["language"] == "Nepali").sum())
     assert n_nepali < 10, (

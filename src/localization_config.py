@@ -1,5 +1,3 @@
-"""Cohort-affinity scoring configuration."""
-
 from __future__ import annotations
 
 import json
@@ -35,7 +33,6 @@ PRIOR_GENRE_AFFINITY: dict[str, float] = {
     "Documentary": 0.20,
     "Music": 0.20,
     "Western": 0.15,
-    "TV": 0.15,
 }
 
 PRIOR_LANGUAGE_AFFINITY: dict[str, float] = {
@@ -48,7 +45,6 @@ PRIOR_LANGUAGE_AFFINITY: dict[str, float] = {
 
 
 def _load_derived_tables() -> tuple[dict[str, float], dict[str, float], str]:
-    """Load data-derived affinity tables, falling back to the prior."""
     if not os.path.exists(DERIVED_AFFINITY_PATH):
         return dict(PRIOR_GENRE_AFFINITY), dict(PRIOR_LANGUAGE_AFFINITY), "prior"
 
@@ -77,13 +73,8 @@ COHORT_GENRE_AFFINITY, COHORT_LANGUAGE_AFFINITY, AFFINITY_SOURCE = (
     _load_derived_tables()
 )
 
-GENRE_LOCALIZATION_WEIGHT = COHORT_GENRE_AFFINITY
-LANGUAGE_LOCALIZATION_WEIGHT = COHORT_LANGUAGE_AFFINITY
-
 COHORT_GENRE_COMPONENT = 0.6
 COHORT_LANGUAGE_COMPONENT = 0.4
-LOCALIZATION_GENRE_WEIGHT = COHORT_GENRE_COMPONENT
-LOCALIZATION_LANGUAGE_WEIGHT = COHORT_LANGUAGE_COMPONENT
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,16 +150,13 @@ def build_genre_weight_vector(preferred_genres: list[str]) -> np.ndarray[Any, An
 def compute_genre_affinity_scores(
     genre_onehot: np.ndarray[Any, Any], genre_vec: np.ndarray[Any, Any]
 ) -> np.ndarray[Any, Any]:
-    """Mean affinity across a title's matching preferred genres."""
     matched = genre_onehot * genre_vec[None, :]
-    match_counts = (genre_onehot > 0).sum(axis=1)
     n_matched = (matched > 0).sum(axis=1)
     totals = matched.sum(axis=1)
 
     with np.errstate(invalid="ignore", divide="ignore"):
         scores = np.where(n_matched > 0, totals / np.maximum(n_matched, 1), 0.0)
 
-    del match_counts
     return scores.astype(np.float32)
 
 

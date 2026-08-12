@@ -1,75 +1,55 @@
-{% extends "base.html" %} {% block title %}Bias Analysis — RQ2{% endblock %} {%
-block content %}
-<div class="eyebrow">
-  RQ2 · Ethical and bias implications of demographic weighting
-</div>
-<h1>Diversity, Novelty &amp; filter-bubble effects</h1>
-<p class="caption">
-  Tests H2: localization may improve personalization but risks narrowing content
-  diversity and reinforcing cultural consumption patterns. Novelty@10 = fraction
-  of recommendations <em>outside</em> the user&apos;s preference bubble
-  (complement of Filter Bubble Score).
+{% extends "base.html" %} {% import "_macros.html" as ui %} {% block title
+%}Bias Analysis — RQ2{% endblock %} {% block content %}
+<div class="eyebrow">RQ2 · What does the cohort signal cost in diversity?</div>
+<h1>Diversity and filter-bubble effects</h1>
+
+{{ ui.track_toggle('/bias', tracks, track_labels, track) }}
+
+<p class="caption wide">
+  Tests H2: the cohort signal may improve personalisation while narrowing
+  exposure.
 </p>
 
-<h2 class="section-gap">Diversity &amp; Novelty by model</h2>
-<p class="caption">
-  Precomputed and read directly from
-  <code>results/rq2_diversity_by_model.csv</code>.
+{% call ui.method("What these metrics mean") %}
+<p>
+  <b>Filter Bubble Score</b> is the fraction of the top 10 matching
+  <em>both</em> the user's preferred language and at least one preferred genre.
+  <b>Preference Escape@10</b> is its exact complement — deliberately not called
+  "novelty", which in the literature means self-information over item
+  popularity, not this. Read from <code>results/rq2_*_{{ track }}.csv</code>.
 </p>
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        {% if diversity %} {% for key in diversity[0].keys() %}
-        <th>{{ key|replace('_', ' ') }}</th>
-        {% endfor %} {% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in diversity %}
-      <tr>
-        {% for v in row.values() %}
-        <td class="num">{{ v }}</td>
-        {% endfor %}
-      </tr>
-      {% else %}
-      <tr>
-        <td class="num">rq2_diversity_by_model.csv not found in results/</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+<p>
+  The <code>Affinity_Only</code> ablation reaches a bubble score of 1.000 and an
+  escape of 0.000 <em>by construction</em>: it scores exactly the predicate the
+  metric measures. It is a reference point, not a measurement. The hybrid's job
+  is to buy accuracy back without going there.
+</p>
+{% endcall %}
 
-<h2 class="section-gap">Filter bubble score by archetype</h2>
+<h2 class="section-gap">Diversity by model</h2>
+{{ ui.data_table(diversity, highlight=('Model', 'Localized_Hybrid'),
+warn=('Model', 'Affinity_Only')) }}
+
+<h2 class="section-gap">Filter bubble by archetype</h2>
+{{ ui.data_table(filter_bubble, highlight=('Model', 'Localized_Hybrid')) }}
+
+<h2 class="section-gap">Accuracy by archetype</h2>
 <p class="caption">
-  Precomputed and read directly from
-  <code>results/rq2_filter_bubble_by_archetype.csv</code>.
+  The fairness check: whether the gain is shared across segments or concentrated
+  in the majority one.
 </p>
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        {% if filter_bubble %} {% for key in filter_bubble[0].keys() %}
-        <th>{{ key|replace('_', ' ') }}</th>
-        {% endfor %} {% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in filter_bubble %}
-      <tr>
-        {% for v in row.values() %}
-        <td class="num">{{ v }}</td>
-        {% endfor %}
-      </tr>
-      {% else %}
-      <tr>
-        <td class="num">
-          rq2_filter_bubble_by_archetype.csv not found in results/
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endblock %}
+{{ ui.data_table(by_archetype, highlight=('Model', 'Localized_Hybrid')) }}
+
+<h2 class="section-gap">Affinity weight sweep (λ)</h2>
+<p class="caption wide">
+  λ = 0 is the standard hybrid; λ = 0.20 is the configured Localized Hybrid.
+</p>
+{% call ui.method("Why λ = 0.20 rather than the optimum") %}
+<p>
+  Accuracy saturates as λ rises while diversity collapses, so λ = 0.20 is a
+  <em>normative</em> choice rather than an optimum — the accuracy-maximising
+  value costs nearly all remaining preference escape. Produced by
+  <code>evaluation/sensitivity_analysis.py</code>.
+</p>
+{% endcall %} {{ ui.data_table(sweep, highlight=('Lambda', 0.2)) }} {{
+ui.figure_row(figures, "RQ2 figure") }} {% endblock %}

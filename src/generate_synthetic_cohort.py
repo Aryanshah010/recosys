@@ -1,5 +1,3 @@
-"""Generate the synthetic cohort used as the controlled evaluation track."""
-
 from __future__ import annotations
 
 import logging
@@ -79,7 +77,6 @@ def load_movies_final(path: str = MOVIES_FINAL_PATH) -> pd.DataFrame:
 
 
 def load_archetype_affinity(movies_df: pd.DataFrame) -> dict[str, np.ndarray]:
-    """Load per-archetype item affinity measured from real users."""
     check_file_exists(ARCHETYPE_AFFINITY_PATH)
     payload = joblib.load(ARCHETYPE_AFFINITY_PATH)
 
@@ -113,7 +110,6 @@ def build_recency_score(movies_df: pd.DataFrame) -> np.ndarray:
 
 
 def assign_archetypes(n_users: int, rng: np.random.Generator) -> list[str]:
-    """Assign archetypes by exact quota rather than by sampling."""
     quotas = target_counts(n_users)
     labels: list[str] = []
     for name in ARCHETYPE_NAMES:
@@ -129,7 +125,6 @@ def sample_user_history(
     k: int,
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Draw one user's rated titles and their latent preference strengths."""
     support = np.flatnonzero(base_affinity > 0)
     if len(support) == 0:
         raise ValueError("Archetype affinity vector has empty support.")
@@ -168,7 +163,6 @@ def sample_user_history(
 
 
 def strengths_to_ratings(strengths: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """Map latent preference strength to the 0.5-5.0 rating scale."""
     n = len(strengths)
     if n == 1:
         norm = np.array([0.75])
@@ -188,7 +182,6 @@ def infer_preferences_from_history(
     genres_by_movie: dict[int, str],
     lang_by_movie: dict[int, str],
 ) -> tuple[str, str]:
-    """Summarise a user's TRAIN-split behaviour into stated preferences."""
     canonical = set(CANONICAL_GENRES)
     mask = (splits == "train") & (ratings >= LIKE_THRESHOLD)
 

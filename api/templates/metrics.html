@@ -1,68 +1,64 @@
-{% extends "base.html" %} {% block title %}Metrics — RQ1{% endblock %} {% block
-content %}
-<div class="eyebrow">RQ1 · Does localization improve ranking performance?</div>
+{% extends "base.html" %} {% import "_macros.html" as ui %} {% block title
+%}Metrics — RQ1{% endblock %} {% block content %}
+<div class="eyebrow">
+  RQ1 · Does the cohort signal improve ranking accuracy?
+</div>
 <h1>Model performance</h1>
-<p class="caption">
-  Precision@10, Recall@10, and NDCG@10 across the four models, aggregated over
-  the synthetic holdout split. Precomputed once offline by
-  <code>evaluation/evaluation_metrics.py</code> and read directly from
-  <code>results/rq1_model_performance.csv</code> — not recalculated per request.
+
+{{ ui.track_toggle('/metrics', tracks, track_labels, track) }}
+
+<p class="caption wide">
+  Six models over the <b>{{ track_label|lower }}</b> holdout split. The real
+  track carries the empirical claim; the synthetic track is a controlled
+  simulation.
 </p>
 
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        {% if performance %} {% for key in performance[0].keys() %}
-        <th>{{ key|replace('_', ' ') }}</th>
-        {% endfor %} {% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in performance %}
-      <tr>
-        {% for v in row.values() %}
-        <td class="num">{{ v }}</td>
-        {% endfor %}
-      </tr>
-      {% else %}
-      <tr>
-        <td class="num">rq1_model_performance.csv not found in results/</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<h2 class="section-gap">Significance testing</h2>
-<p class="caption">
-  Paired t-test comparing every model pair on NDCG@10 — tests H1 (localized
-  hybrid ranks significantly better). Precomputed and read from
-  <code>results/rq1_significance_tests.csv</code>.
+{% call ui.method() %}
+<p>
+  Leave-out protocol with 1,000 popularity-stratified negative candidates per
+  user — negatives are drawn to match the popularity profile of each user's
+  positives, so the popularity baseline cannot win for free. Computed once
+  offline by <code>evaluation/evaluation_metrics.py</code> and read from
+  <code>results/rq1_model_performance_{{ track }}.csv</code>, not recalculated
+  per request.
 </p>
+<p>
+  Precision@10 is structurally capped at <code>|holdout|/10</code>; the
+  attainable ceiling is reported alongside it. HR@10 and MRR@10 are not subject
+  to that cap.
+</p>
+{% endcall %} {{ ui.data_table(performance, highlight=('Model',
+'Localized_Hybrid')) }} {% if performance %}
+<figure class="figure">
+  <img src="{{ figure }}" alt="RQ1 model performance, {{ track }} track" />
+  <figcaption>Ranking accuracy by model — {{ track_label|lower }}.</figcaption>
+</figure>
+{% endif %}
 
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        {% if significance %} {% for key in significance[0].keys() %}
-        <th>{{ key|replace('_', ' ') }}</th>
-        {% endfor %} {% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in significance %}
-      <tr>
-        {% for v in row.values() %}
-        <td class="num">{{ v }}</td>
-        {% endfor %}
-      </tr>
-      {% else %}
-      <tr>
-        <td class="num">rq1_significance_tests.csv not found in results/</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endblock %}
+<h2 class="section-gap">The effect itself</h2>
+<p class="caption wide">
+  The localized hybrid against the standard one, per user, with a 95% bootstrap
+  interval. An interval excluding zero is the claim RQ1 actually makes.
+</p>
+{{ ui.data_table(headline) }}
+
+<h2 class="section-gap">Significance on NDCG@10</h2>
+{% call ui.method("How significance was tested") %}
+<p>
+  Every model pair tested with a paired t-test <em>and</em> a Wilcoxon
+  signed-rank test, since NDCG is heavily zero-inflated. Holm–Bonferroni
+  corrected across the 15-comparison family, with paired effect sizes
+  (<code>Cohens_dz</code>) and explicit win/tie/loss counts, because a mean
+  improvement can be driven by a minority of users while most are unchanged.
+  Rows surviving correction at α = 0.05 are highlighted.
+</p>
+{% endcall %} {{ ui.data_table(significance, highlight=('Significant_holm',
+'yes')) }}
+
+<h2 class="section-gap">95% confidence intervals</h2>
+<p class="caption">
+  Per-model marginal intervals. They overlap, and cannot be read as a test of
+  the difference between models — that is what the table above is for.
+</p>
+{{ ui.data_table(intervals, highlight=('Model', 'Localized_Hybrid')) }} {%
+endblock %}

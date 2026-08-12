@@ -1,6 +1,6 @@
 {% extends "base.html" %} {% block title %}User #{{ profile.userId }} Profile{%
 endblock %} {% block content %}
-<div class="eyebrow">Synthetic user profile</div>
+<div class="eyebrow">Cohort user profile</div>
 <h1>User #{{ profile.userId }} · {{ profile.archetype }}</h1>
 <div class="card profile-card">
   <div class="profile-grid">
@@ -13,8 +13,8 @@ endblock %} {% block content %}
       <div class="stat-value">{{ profile.gender }}</div>
     </div>
     <div>
-      <div class="stat-label">Occupation</div>
-      <div class="stat-value">{{ profile.occupation }}</div>
+      <div class="stat-label">Education</div>
+      <div class="stat-value small">{{ profile.education }}</div>
     </div>
     <div>
       <div class="stat-label">Movies rated</div>
@@ -36,9 +36,42 @@ endblock %} {% block content %}
       >{% endfor %}
     </div>
   </div>
-  <br>
+  <p class="caption">
+    Age, gender and education are recorded but are not model features — the
+    cohort signal operates at archetype level.
+  </p>
   <a class="btn" href="/dashboard/{{ profile.userId }}"
-    >Go back →</a
+    >Open recommendation lab →</a
   >
+</div>
+
+<h2 class="section-gap">Session history</h2>
+<p class="caption">
+  Past generations for this user, which is what the before/after comparison on
+  the dashboard reads from.
+</p>
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Session</th>
+        <th>Trigger</th>
+        <th>Recorded at (UTC)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sessions %}
+      <tr>
+        <td class="num">#{{ s.id }}</td>
+        <td>{{ s.trigger }}</td>
+        <td class="num">{{ s.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="3">No sessions yet for this user.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endblock %}

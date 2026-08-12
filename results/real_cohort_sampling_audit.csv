@@ -1,6 +1,6 @@
 Archetype,Quota,Available,Sampled,Sampling_Fraction
-anime,80,482,80,0.166
-bollywood,80,226,80,0.354
-kdrama,60,144,60,0.4167
-hollywood,140,144100,140,0.001
-mixed,40,15046,40,0.0027
+anime,80,412,80,0.1942
+bollywood,80,182,80,0.4396
+korean,60,114,60,0.5263
+hollywood,140,129731,140,0.0011
+mixed,40,12880,40,0.0031

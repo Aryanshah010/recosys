@@ -82,6 +82,7 @@ class HybridRecommender:
         self.clean_genres = self.cbf.clean_genres
         self.language = self.cbf.language
         self.n_movies = self.cbf.n_movies
+        self.quality_scores = self.cbf.quality_scores
 
         self._genre_onehot = build_genre_onehot_from_list(self.clean_genres)
         self._movie_language = np.asarray(self.language)
@@ -141,8 +142,10 @@ class HybridRecommender:
     def get_cbf_scores(self, liked_movie_ids: list[int]) -> np.ndarray:
         return self.cbf.get_content_scores(liked_movie_ids)
 
+    def get_popularity_scores(self) -> np.ndarray:
+        return self.quality_scores.astype(np.float32)
+
     def get_localization_scores(self, profile: UserProfile) -> np.ndarray:
-        """Cohort-affinity score for every catalogue title."""
         genre_vec = build_genre_weight_vector(list(profile.genres))
         genre_score = min_max_normalize(
             compute_genre_affinity_scores(self._genre_onehot, genre_vec)
@@ -160,7 +163,6 @@ class HybridRecommender:
         ).astype(np.float32)
 
     def get_affinity_only_scores(self, profile: UserProfile) -> np.ndarray:
-        """Ablation: cohort affinity with no CF or CBF contribution."""
         return (
             AFFINITY_ONLY_WEIGHTS.localization * self.get_localization_scores(profile)
         ).astype(np.float32)
@@ -209,39 +211,3 @@ class HybridRecommender:
             if len(results) >= k:
                 break
         return results
-
-
-def main() -> None:
-    engine = HybridRecommender()
-
-    demo_user_id = 1
-    demo_liked = [1, 2571]
-    demo_profile = UserProfile(
-        genres=("Sci-Fi", "Action"),
-        languages=("English", "Hindi"),
-        archetype="hollywood",
-    )
-
-    for label, scores in [
-        ("Model 1: CF", engine.get_cf_scores(demo_user_id)),
-        ("Model 2: CBF", engine.get_cbf_scores(demo_liked)),
-        (
-            "Model 3: Standard Hybrid",
-            engine.get_standard_hybrid_scores(demo_user_id, demo_liked),
-        ),
-        (
-            "Model 4: Localized Hybrid",
-            engine.get_localized_hybrid_scores(demo_user_id, demo_liked, demo_profile),
-        ),
-    ]:
-        print(f"\n{label}")
-        for r in engine.recommend_from_scores(
-            scores, exclude_movie_ids=demo_liked, k=10
-        ):
-            print(
-                f"  {r.movie_id:>7}  {r.title[:40]:<40}  {r.genres:<25}  {r.language:<10}  {r.score:.4f}"
-            )
-
-
-if __name__ == "__main__":
-    main()

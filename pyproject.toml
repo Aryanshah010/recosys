@@ -24,6 +24,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",
+    "nbconvert>=7.17.1",
     "pytest>=9.1.1",
     "ruff>=0.14.0",
 ]
@@ -50,8 +51,8 @@ reportMissingTypeStubs = false
 reportPrivateImportUsage = false
 
 [tool.ruff]
-target-version = "py312"
-exclude = [".venv", "archive", "notebooks"]
+target-version = "py314"
+exclude = [".venv", "notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

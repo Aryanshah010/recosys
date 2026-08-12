@@ -73,6 +73,10 @@ class ContentBasedFilter:
         self.clean_genres = cast(list[str], self.metadata["clean_genres"])
         self.language = cast(list[str], self.metadata["language"])
         self.n_movies = cast(int, self.metadata["n_movies"])
+        self.quality_scores = np.asarray(
+            self.metadata.get("quality_scores", np.zeros(self.n_movies)),
+            dtype=np.float32,
+        )
 
         logger.info("Loaded CBF matrix: %d movies.", self.n_movies)
 
@@ -131,23 +135,3 @@ class ContentBasedFilter:
             if len(results) >= k:
                 break
         return results
-
-
-def main() -> None:
-    engine = ContentBasedFilter()
-
-    demo_liked = [
-        1,
-        2571,
-    ]
-    recs = engine.recommend(demo_liked, k=10)
-
-    print(f"\nContent-based recommendations for liked={demo_liked}:")
-    for r in recs:
-        print(
-            f"  {r['movieId']:>7}  {r['title'][:40]:<40}  {r['clean_genres']:<25}  {r['language']:<10}  {r['score']:.4f}"
-        )
-
-
-if __name__ == "__main__":
-    main()

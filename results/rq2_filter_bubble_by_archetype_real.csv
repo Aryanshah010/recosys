@@ -1,7 +1,7 @@
-Model,anime,bollywood,hollywood,kdrama,mixed
-Popularity,0.394,0.454,0.422,0.493,0.512
-CF_ColdStart,0.524,0.504,0.517,0.443,0.358
-CBF,0.847,0.721,0.742,0.698,0.69
+Model,anime,bollywood,hollywood,korean,mixed
+Popularity,0.468,0.506,0.457,0.564,0.533
+CF_ColdStart,0.544,0.508,0.494,0.498,0.372
+CBF,0.824,0.735,0.734,0.717,0.659
 Affinity_Only,1.0,1.0,1.0,1.0,1.0
-NonLocal_Hybrid,0.856,0.701,0.719,0.662,0.52
-Localized_Hybrid,0.977,0.948,0.956,0.917,0.908
+NonLocal_Hybrid,0.78,0.689,0.707,0.658,0.515
+Localized_Hybrid,0.971,0.936,0.967,0.925,0.936

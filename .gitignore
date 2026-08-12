@@ -29,6 +29,7 @@ data/processed/*.pkl
 data/processed/*.npy
 data/processed/*.npz
 data/processed/*.json
+!data/processed/television_exclusions.json
 
 
 *.db
@@ -67,6 +68,3 @@ htmlcov/
 .env
 .env.*
 secrets.json
-
-# Local working notes, not part of the deliverable
-CHANGES_AND_FLAWS.md

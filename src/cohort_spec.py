@@ -1,13 +1,9 @@
-"""Shared specification of the target cohort."""
-
 from __future__ import annotations
 
 from typing import TypedDict
 
 
 class ArchetypeSpec(TypedDict):
-    """Behavioural definition of one consumption archetype."""
-
     name: str
     target_share: float
     language: str | None
@@ -31,7 +27,7 @@ ARCHETYPE_SPECS: tuple[ArchetypeSpec, ...] = (
         "priority": 2,
     },
     {
-        "name": "kdrama",
+        "name": "korean",
         "target_share": 0.15,
         "language": "Korean",
         "min_share": 0.10,
@@ -133,7 +129,6 @@ assert_valid()
 
 
 def target_counts(n_users: int = N_COHORT_USERS) -> dict[str, int]:
-    """Quota per archetype, with rounding absorbed by the largest stratum."""
     counts = {
         a["name"]: int(round(a["target_share"] * n_users)) for a in ARCHETYPE_SPECS
     }
@@ -145,7 +140,6 @@ def target_counts(n_users: int = N_COHORT_USERS) -> dict[str, int]:
 
 
 def label_from_language_shares(shares: dict[str, float]) -> str:
-    """Assign a behavioural archetype from a user's liked-language shares."""
     for spec in sorted(ARCHETYPE_SPECS, key=lambda a: a["priority"]):
         lang = spec["language"]
         if lang is None:

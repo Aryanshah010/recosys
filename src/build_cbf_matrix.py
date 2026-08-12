@@ -81,7 +81,6 @@ def load_movies_final(path: str = MOVIES_FINAL_PATH) -> pd.DataFrame:
 
 
 def build_content_soup(movies_df: pd.DataFrame) -> pd.Series:
-    """Combine canonical genres with TMDB synopsis text."""
 
     genres = (
         movies_df["clean_genres"]

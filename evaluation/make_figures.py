@@ -1,5 +1,3 @@
-"""Generate the RQ1 / RQ2 result figures."""
-
 from __future__ import annotations
 
 import logging
@@ -79,7 +77,6 @@ def _read_processed(name: str, **kwargs) -> pd.DataFrame | None:
 
 
 def fig_rating_distribution(idx: int) -> None:
-    """Descriptive: how the cleaned MovieLens ratings are distributed."""
     df = _read_processed("ratings_final.csv", usecols=["rating"])
     if df is None:
         return
@@ -99,7 +96,6 @@ def fig_rating_distribution(idx: int) -> None:
 
 
 def fig_genre_popularity(idx: int) -> None:
-    """Descriptive: catalogue composition by canonical genre."""
     df = _read_processed("movies_final.csv", usecols=["clean_genres"])
     if df is None:
         return
@@ -119,7 +115,6 @@ def fig_genre_popularity(idx: int) -> None:
 
 
 def fig_language_distribution(idx: int) -> None:
-    """Descriptive: the catalogue's language skew, which motivates the study."""
     df = _read_processed("movies_final.csv", usecols=["language"])
     if df is None:
         return
@@ -186,8 +181,8 @@ def fig_diversity(track: str, idx: int) -> None:
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
     for ax, col, title in zip(
         axes,
-        ["Language_Diversity", "Genre_Diversity", "Novelty@10"],
-        ["Language diversity", "Genre diversity", "Novelty@10 (1 − bubble)"],
+        ["Language_Diversity", "Genre_Diversity", "Preference_Escape@10"],
+        ["Language diversity", "Genre diversity", "Preference escape@10 (1 − bubble)"],
     ):
         if col not in df.columns:
             continue
@@ -246,7 +241,6 @@ def fig_bubble_by_archetype(track: str, idx: int) -> None:
 
 
 def fig_tradeoff_curve(track: str, idx: int) -> None:
-    """The accuracy / diversity trade-off — the key RQ2 figure."""
     df = _read(f"sensitivity_lambda_summary_{track}.csv")
     if df is None:
         return
@@ -260,9 +254,14 @@ def fig_tradeoff_curve(track: str, idx: int) -> None:
     ax1.tick_params(axis="y", labelcolor="#c8553d")
 
     ax2.plot(
-        df["Lambda"], df["Novelty@10"], "s--", color="#3d6fc8", lw=2, label="Novelty@10"
+        df["Lambda"],
+        df["Preference_Escape@10"],
+        "s--",
+        color="#3d6fc8",
+        lw=2,
+        label="Preference escape@10",
     )
-    ax2.set_ylabel("Novelty@10 (1 − filter bubble)", color="#3d6fc8")
+    ax2.set_ylabel("Preference escape@10 (1 − filter bubble)", color="#3d6fc8")
     ax2.tick_params(axis="y", labelcolor="#3d6fc8")
     ax2.grid(False)
 
@@ -285,7 +284,6 @@ def fig_tradeoff_curve(track: str, idx: int) -> None:
 
 
 def fig_benchmark_representation(idx: int) -> None:
-    """How unlike the target cohort the standard benchmark population is."""
     df = _read("benchmark_population_profile.csv")
     if df is None:
         return
@@ -341,7 +339,6 @@ def fig_benchmark_representation(idx: int) -> None:
 
 
 def fig_track_comparison(idx: int) -> None:
-    """Real versus synthetic track, side by side."""
     path = os.path.join(RESULTS_DIR, "evaluation_user_level.csv")
     if not os.path.exists(path):
         return

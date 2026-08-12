@@ -1,5 +1,3 @@
-"""Select a real MovieLens proxy cohort matching the target consumption profile."""
-
 from __future__ import annotations
 
 import json
@@ -93,7 +91,6 @@ def load_inputs() -> tuple[pd.DataFrame, pd.DataFrame]:
 def compute_language_shares(
     ratings_df: pd.DataFrame, movies_df: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.Series]:
-    """Per-user share of liked ratings by movie language."""
     lang_by_movie = dict(zip(movies_df["movieId"], movies_df["language"]))
 
     liked = ratings_df.loc[
@@ -124,7 +121,6 @@ def label_users(shares: pd.DataFrame) -> pd.Series:
 def report_benchmark_population(
     labels: pd.Series, shares: pd.DataFrame
 ) -> pd.DataFrame:
-    """Quantify how unlike the target cohort the benchmark population is."""
     counts = labels.value_counts()
     pct = (counts / len(labels) * 100).round(3)
 
@@ -166,7 +162,6 @@ def report_benchmark_population(
 def sample_cohort(
     labels: pd.Series, rng: np.random.Generator
 ) -> tuple[pd.Series, pd.DataFrame]:
-    """Stratified quota sample matching the target cohort's archetype mix."""
     quotas = target_counts(N_COHORT_USERS)
     picked: list[int] = []
     audit_rows = []
@@ -208,15 +203,18 @@ def sample_cohort(
     return pd.Series(picked, name="userId"), audit
 
 
-def temporal_split(group: pd.DataFrame) -> np.ndarray:
-    """Leave-last-n split by timestamp."""
-    n = len(group)
-    n_train = max(1, round(n * TRAIN_SPLIT_RATIO))
-    order = np.argsort(group["timestamp"].to_numpy(), kind="stable")
-    labels = np.empty(n, dtype=object)
-    labels[order[:n_train]] = "train"
-    labels[order[n_train:]] = "holdout"
-    return labels
+def train_mask(ratings_df: pd.DataFrame) -> pd.Series:
+   
+    position = ratings_df.groupby("userId")["timestamp"].rank(method="first") - 1
+    n = ratings_df.groupby("userId")["timestamp"].transform("size")
+    n_train = np.maximum(1, np.rint(n * TRAIN_SPLIT_RATIO))
+    return position < n_train
+
+
+def temporal_split_labels(ratings_df: pd.DataFrame) -> pd.Series:
+    return pd.Series(
+        np.where(train_mask(ratings_df), "train", "holdout"), index=ratings_df.index
+    )
 
 
 def build_cohort_ratings(
@@ -224,11 +222,7 @@ def build_cohort_ratings(
 ) -> pd.DataFrame:
     subset = ratings_df[ratings_df["userId"].isin(list(cohort_ids))].copy()
     subset = subset.sort_values(["userId", "timestamp"], kind="stable")
-
-    splits = []
-    for _, grp in subset.groupby("userId", sort=False):
-        splits.append(pd.Series(temporal_split(grp), index=grp.index))
-    subset["split"] = pd.concat(splits)
+    subset["split"] = temporal_split_labels(subset)
 
     logger.info(
         "Cohort ratings: %d rows (%d train / %d holdout) across %d users.",
@@ -243,7 +237,6 @@ def build_cohort_ratings(
 def infer_preferences(
     cohort_ratings: pd.DataFrame, movies_df: pd.DataFrame
 ) -> pd.DataFrame:
-    """Derive stated preferences from the TRAIN split only."""
     genres_by_movie = dict(zip(movies_df["movieId"], movies_df["clean_genres"]))
     lang_by_movie = dict(zip(movies_df["movieId"], movies_df["language"]))
     canonical = set(CANONICAL_GENRES)
@@ -298,7 +291,6 @@ def build_archetype_affinity(
     users_df: pd.DataFrame,
     movies_df: pd.DataFrame,
 ) -> dict[str, np.ndarray]:
-    """Per-archetype item affinity, measured from real in-group consumption."""
     movie_ids = movies_df["movieId"].to_numpy()
     index_of = {int(m): i for i, m in enumerate(movie_ids)}
 
@@ -347,7 +339,6 @@ def derive_affinity_tables(
     labels: pd.Series,
     cohort_ids: set[int],
 ) -> dict[str, dict[str, float]]:
-    """Estimate genre and language affinity tables from real consumption."""
     from .cohort_spec import ARCHETYPE_BY_NAME
 
     estim_ids = [int(u) for u in labels.index if int(u) not in cohort_ids]
@@ -414,7 +405,6 @@ def derive_affinity_tables(
     def _lift_table(
         overall: dict[str, float], by_arch: dict[str, dict[str, float]]
     ) -> dict[str, float]:
-        """Max lift of each category across archetypes, log-compressed to [0,1]."""
         pop = _shares(overall)
         arch_shares = {a: _shares(m) for a, m in by_arch.items()}
 
@@ -506,7 +496,9 @@ def main() -> None:
 
     movies_df, ratings_df = load_inputs()
 
-    shares, _ = compute_language_shares(ratings_df, movies_df)
+    logger.info("Computing archetype labels from the training split only...")
+    train_ratings = ratings_df[train_mask(ratings_df)]
+    shares, _ = compute_language_shares(train_ratings, movies_df)
     labels = label_users(shares)
     report_benchmark_population(labels, shares)
 

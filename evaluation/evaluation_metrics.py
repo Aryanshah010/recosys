@@ -1,5 +1,3 @@
-"""Master evaluation harness for RQ1 (accuracy) and RQ2 (diversity / bias)."""
-
 from __future__ import annotations
 
 import contextlib
@@ -60,7 +58,6 @@ HOLDOUT_RATING_THRESHOLD = 3.5
 RANDOM_SEED = 42
 N_NEGATIVE_CANDIDATES = 1_000
 
-NEGATIVE_SAMPLING = "popularity_stratified"
 N_POPULARITY_BINS = 10
 
 MODEL_ORDER = [
@@ -73,6 +70,7 @@ MODEL_ORDER = [
 ]
 
 ALPHA = 0.05
+N_BOOTSTRAP = 5_000
 
 
 def _check(path: str) -> None:
@@ -157,9 +155,16 @@ def build_holdout_split(
 
 
 def build_popularity_bins(quality: np.ndarray) -> np.ndarray:
-    """Assign each catalogue item to a popularity decile."""
     ranks = stats.rankdata(quality, method="average") / max(len(quality), 1)  # pyright: ignore[reportAttributeAccessIssue]
     return np.clip((ranks * N_POPULARITY_BINS).astype(int), 0, N_POPULARITY_BINS - 1)
+
+
+def _shuffled_candidates(
+    holdout_pos: list[int], negatives: list[int], rng: np.random.Generator
+) -> list[int]:
+   
+    candidates = [*holdout_pos, *negatives]
+    return [candidates[i] for i in rng.permutation(len(candidates))]
 
 
 def build_candidate_set(
@@ -170,7 +175,7 @@ def build_candidate_set(
     pop_bins: np.ndarray,
     user_id: int,
 ) -> list[int]:
-    """Sample negatives, optionally matched to the positives' popularity band."""
+  
     excluded = set(train_ids) | set(holdout_pos)
     rng = np.random.default_rng(RANDOM_SEED + user_id)
 
@@ -181,14 +186,10 @@ def build_candidate_set(
 
     n_negatives = min(N_NEGATIVE_CANDIDATES, len(negative_pool))
 
-    if NEGATIVE_SAMPLING != "popularity_stratified":
-        negatives = rng.choice(negative_pool, size=n_negatives, replace=False).tolist()
-        return sorted([*holdout_pos, *negatives])
-
     pos_bins = [pop_bins[movie_index[m]] for m in holdout_pos if m in movie_index]
     if not pos_bins:
         negatives = rng.choice(negative_pool, size=n_negatives, replace=False).tolist()
-        return sorted([*holdout_pos, *negatives])
+        return _shuffled_candidates(holdout_pos, negatives, rng)
 
     target = np.bincount(pos_bins, minlength=N_POPULARITY_BINS).astype(float)
     target = target / target.sum()
@@ -214,7 +215,7 @@ def build_candidate_set(
             top_up = min(n_negatives - len(chosen), len(remaining))
             chosen.extend(rng.choice(remaining, size=top_up, replace=False).tolist())
 
-    return sorted([*holdout_pos, *chosen])
+    return _shuffled_candidates(holdout_pos, chosen, rng)
 
 
 def _normalise(values: np.ndarray) -> np.ndarray:
@@ -256,7 +257,6 @@ def compute_affinity_score(
     pref_genres: list[str],
     pref_languages: list[str],
 ) -> dict[int, float]:
-    """Cohort-affinity score."""
     pref_lang_set = set(pref_languages)
     pref_genre_set = set(pref_genres)
 
@@ -349,7 +349,6 @@ def precision_at_k(top_k: list[int], ground_truth: list[int]) -> float:
 
 
 def precision_ceiling(ground_truth: list[int]) -> float:
-    """Maximum attainable Precision@K given how few holdout items exist."""
     return min(len(ground_truth), K) / K
 
 
@@ -360,7 +359,6 @@ def recall_at_k(top_k: list[int], ground_truth: list[int]) -> float:
 
 
 def hit_rate_at_k(top_k: list[int], ground_truth: list[int]) -> float:
-    """1 if any holdout positive is retrieved. Not capped by |holdout|."""
     return 1.0 if set(top_k) & set(ground_truth) else 0.0
 
 
@@ -403,7 +401,6 @@ def filter_bubble_score(
     clean_genres: list[str],
     language: list[str],
 ) -> float:
-    """Fraction of the top-K matching BOTH preferred language and genre."""
     pref_lang_set, pref_genre_set = set(pref_languages), set(pref_genres)
     matches = 0
     for mid in top_k:
@@ -441,8 +438,18 @@ def compute_metrics(
         "Language_Diversity": language_diversity(top_k, movie_index, language),
         "Genre_Diversity": genre_diversity(top_k, movie_index, clean_genres),
         "Filter_Bubble_Score": bubble,
-        "Novelty@10": round(1.0 - bubble, 4),
+        "Preference_Escape@10": round(1.0 - bubble, 4),
     }
+
+
+def select_eval_users(splits: dict) -> list[int]:
+    eval_uids = sorted(splits)
+    if len(eval_uids) <= MAX_EVAL_USERS:
+        return eval_uids
+    rng = np.random.default_rng(RANDOM_SEED)
+    return sorted(
+        int(u) for u in rng.choice(eval_uids, size=MAX_EVAL_USERS, replace=False)
+    )
 
 
 def run_evaluation(track: str, shared: tuple) -> pd.DataFrame:
@@ -455,12 +462,7 @@ def run_evaluation(track: str, shared: tuple) -> pd.DataFrame:
     profiles = users_df.set_index("userId").to_dict("index")
     pop_bins = build_popularity_bins(quality)
 
-    rng = np.random.default_rng(RANDOM_SEED)
-    eval_uids = sorted(splits)
-    if len(eval_uids) > MAX_EVAL_USERS:
-        eval_uids = sorted(
-            int(u) for u in rng.choice(eval_uids, size=MAX_EVAL_USERS, replace=False)
-        )
+    eval_uids = select_eval_users(splits)
 
     rows = []
     for i, uid in enumerate(eval_uids):
@@ -528,7 +530,6 @@ def print_section(title: str) -> None:
 
 
 def holm_bonferroni(pvals: list[float]) -> list[float]:
-    """Holm-Bonferroni step-down adjusted p-values."""
     m = len(pvals)
     order = np.argsort(pvals)
     adjusted = np.empty(m, dtype=float)
@@ -597,7 +598,7 @@ def report_significance(df: pd.DataFrame, track: str) -> None:
                 "t_statistic": round(float(t_stat), 4),
                 "p_ttest": float(p_t),
                 "p_wilcoxon": float(p_w),
-                "Cohens_d": round(float(d), 4),
+                "Cohens_dz": round(float(d), 4),
                 "B_wins": int((xb > xa).sum()),
                 "Ties": int((xb == xa).sum()),
                 "B_losses": int((xb < xa).sum()),
@@ -644,7 +645,61 @@ def report_confidence_intervals(df: pd.DataFrame, track: str) -> None:
 
     out = pd.DataFrame(rows)
     print(out.to_string(index=False))
+    print(
+        "\n  These are per-model marginal intervals. They overlap heavily and "
+        "must NOT be\n  read as a test of the difference between models -- the "
+        "design is paired.\n  See TABLE 3b for the interval on the effect itself."
+    )
     out.to_csv(f"{RESULTS_DIR}/rq1_confidence_intervals_{track}.csv", index=False)
+
+
+def report_headline_effect(df: pd.DataFrame, track: str) -> None:
+    print_section(f"[{track}] TABLE 3b: HEADLINE EFFECT WITH 95% BOOTSTRAP CI")
+
+    rows = []
+    rng = np.random.default_rng(RANDOM_SEED)
+    for metric in ["Precision@10", "Recall@10", "HR@10", "MRR@10", "NDCG@10"]:
+        paired = df.pivot_table(
+            index="UserId", columns="Model", values=metric, aggfunc="mean"
+        ).dropna(subset=["NonLocal_Hybrid", "Localized_Hybrid"])
+        if len(paired) < 2:
+            continue
+
+        base = paired["NonLocal_Hybrid"].to_numpy(float)
+        loc = paired["Localized_Hybrid"].to_numpy(float)
+        diff = loc - base
+
+        idx = rng.integers(0, len(diff), size=(N_BOOTSTRAP, len(diff)))
+        boot_abs = diff[idx].mean(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            boot_rel = boot_abs / base[idx].mean(axis=1)
+
+        abs_lo, abs_hi = np.percentile(boot_abs, [2.5, 97.5])
+        rel_lo, rel_hi = np.nanpercentile(boot_rel, [2.5, 97.5])
+
+        rows.append(
+            {
+                "Metric": metric,
+                "N_Users": len(diff),
+                "NonLocal_Hybrid": round(float(base.mean()), 4),
+                "Localized_Hybrid": round(float(loc.mean()), 4),
+                "Abs_Gain": round(float(diff.mean()), 4),
+                "Abs_CI_lower": round(float(abs_lo), 4),
+                "Abs_CI_upper": round(float(abs_hi), 4),
+                "Rel_Gain_pct": round(100.0 * float(diff.mean() / base.mean()), 2),
+                "Rel_CI_lower_pct": round(100.0 * float(rel_lo), 2),
+                "Rel_CI_upper_pct": round(100.0 * float(rel_hi), 2),
+            }
+        )
+
+    out = pd.DataFrame(rows)
+    print(out.to_string(index=False))
+    print(
+        f"\n  Paired percentile bootstrap, {N_BOOTSTRAP:,} resamples over users, "
+        f"seed {RANDOM_SEED}.\n  An interval excluding zero is the claim RQ1 "
+        "actually makes."
+    )
+    out.to_csv(f"{RESULTS_DIR}/rq1_headline_effect_{track}.csv", index=False)
 
 
 def report_rq2_diversity(df: pd.DataFrame, track: str) -> None:
@@ -654,7 +709,7 @@ def report_rq2_diversity(df: pd.DataFrame, track: str) -> None:
         "Language_Diversity",
         "Genre_Diversity",
         "Filter_Bubble_Score",
-        "Novelty@10",
+        "Preference_Escape@10",
     ]
     out = mean_frame(df, "Model", columns, decimals=3).reindex(MODEL_ORDER)
     out = out.reset_index()
@@ -702,6 +757,7 @@ def main() -> None:
         report_rq1(df, track)
         report_significance(df, track)
         report_confidence_intervals(df, track)
+        report_headline_effect(df, track)
         report_rq2_diversity(df, track)
         report_by_archetype(df, track)
         all_frames.append(df)

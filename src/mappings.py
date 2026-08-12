@@ -3,7 +3,6 @@ from __future__ import annotations
 CANONICAL_GENRE_MAP: dict[str, str] = {
     "Science Fiction": "Sci-Fi",
     "Sci-Fi": "Sci-Fi",
-    "TV Movie": "TV",
     "Action": "Action",
     "Adventure": "Adventure",
     "Animation": "Animation",
@@ -28,7 +27,6 @@ CANONICAL_GENRE_MAP: dict[str, str] = {
 
 CANONICAL_GENRES: tuple[str, ...] = (
     "Sci-Fi",
-    "TV",
     "Action",
     "Adventure",
     "Animation",

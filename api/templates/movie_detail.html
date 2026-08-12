@@ -28,6 +28,7 @@ endblock %} {% block content %}
         >TMDB rating
         <b>★ {{ '%.1f'|format(movie.average_rating or 0) }}</b></span
       >
+      <span>Votes <b>{{ movie.vote_count or 0 }}</b></span>
     </div>
     <div class="rating-box">
       <div>
@@ -50,6 +51,9 @@ endblock %} {% block content %}
       <button class="btn" id="submit-rating" disabled>
         Save rating &amp; regenerate
       </button>
+      <p class="caption">
+        Rating this title updates the user's profile and re-scores every model.
+      </p>
     </div>
   </div>
 </section>

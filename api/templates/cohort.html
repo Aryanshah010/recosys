@@ -1,0 +1,72 @@
+{% extends "base.html" %} {% import "_macros.html" as ui %} {% block title
+%}Cohort &amp; Representation{% endblock %} {% block content %}
+<div class="eyebrow">Study premise · why this cohort needs measuring</div>
+<h1>Representation gap</h1>
+
+<p class="caption wide">
+  "Localization" here means <b>audience</b> localization: the cohort's
+  multilingual consumption profile, which differs structurally from the
+  English-dominant default global recommenders assume.
+</p>
+
+{% call ui.method("Why not Nepali cinema?") %}
+<p>
+  The catalogue holds exactly <b>one</b> Nepali title out of {{
+  '{:,}'.format(catalogue_size) }} (<i>Manakamana</i>, 2013, a documentary with
+  12 votes), so no claim about surfacing Nepali cinema is testable here.
+  Supplementing the catalogue was ruled out: no cohort user prefers Nepali, no
+  rating exists for any Nepali film so a title can never be a held-out positive,
+  and language affinity is estimated as consumption lift, which pins Nepali at
+  the floor at any catalogue size.
+</p>
+{% endcall %}
+
+<h2 class="section-gap">Benchmark population</h2>
+<p class="caption">
+  MovieLens users with at least 20 liked ratings, classified by dominant
+  consumption language.
+</p>
+{{ ui.data_table(benchmark, warn=('Archetype', 'hollywood')) }} {% if
+english_share %}
+<p class="caption">
+  <b>{{ english_share }}%</b> of the benchmark population is English-dominant.
+  The three minority-language archetypes together account for
+  <b>{{ cohort_share }}%</b> — that is the slice of the standard benchmark
+  population this cohort is drawn from.
+</p>
+{% endif %}
+
+<h2 class="section-gap">Real cohort sampling audit</h2>
+<p class="caption">
+  How hard each stratum was to fill. The minority strata are quota-limited by
+  availability, not by choice — this is the under-representation, measured.
+</p>
+{{ ui.data_table(sampling) }}
+
+<h2 class="section-gap">Affinity tables: hand-set prior vs derived</h2>
+<p class="caption wide">
+  The affinity weights are <b>not</b> hand-tuned — they are estimated from data,
+  and the estimate inverts the prior.
+</p>
+{% call ui.method("How the derived table is estimated") %}
+<p>
+  Affinity is estimated as cross-archetype consumption lift on users
+  <em>excluded</em> from the cohort, which is what keeps the scorer independent
+  of the generator. The hand-set prior is retained only as a fallback and as a
+  comparison — and it ranked English highest and Nepali lowest, the exact
+  opposite of the study's premise. The derived table inverts it.
+</p>
+{% endcall %}
+
+<div class="two-col">
+  <div>
+    <h3 class="archetype-label">Language</h3>
+    {{ ui.comparison_table(languages, "Language", emphasise=true) }}
+  </div>
+  <div>
+    <h3 class="archetype-label">Genre</h3>
+    {{ ui.comparison_table(genres, "Genre", scroll=true) }}
+  </div>
+</div>
+
+{{ ui.figure_row(figures, "Cohort figure") }} {% endblock %}

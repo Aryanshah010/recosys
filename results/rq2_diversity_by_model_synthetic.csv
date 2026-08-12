@@ -1,7 +1,7 @@
-Model,Language_Diversity,Genre_Diversity,Filter_Bubble_Score,Novelty@10
-Popularity,3.478,9.955,0.528,0.472
-CF_ColdStart,2.458,10.018,0.701,0.299
-CBF,2.74,8.348,0.825,0.175
-Affinity_Only,1.028,7.878,1.0,0.0
-NonLocal_Hybrid,2.418,9.238,0.853,0.146
-Localized_Hybrid,1.548,9.175,0.984,0.016
+Model,Language_Diversity,Genre_Diversity,Filter_Bubble_Score,Preference_Escape@10
+Popularity,3.778,10.142,0.589,0.411
+CF_ColdStart,2.985,10.165,0.721,0.279
+CBF,2.705,8.54,0.83,0.169
+Affinity_Only,1.018,7.92,1.0,0.0
+NonLocal_Hybrid,2.48,9.288,0.844,0.156
+Localized_Hybrid,1.518,9.1,0.985,0.015

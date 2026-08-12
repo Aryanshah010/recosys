@@ -6,8 +6,9 @@ profile.userId }}{% endblock %} {% block content %}
     <h1>User #{{ profile.userId }} · {{ profile.archetype }}</h1>
     <p class="caption">
       Preferred: {{ profile.preferred_genres|join(', ') }} · {{
-      profile.preferred_language|join(', ') }}.
-      <a href="/profile/{{ profile.userId }}">Profile</a>
+      profile.preferred_language|join(', ') }} · {{ profile.base_rating_count }}
+      ratings on file.
+      <a href="/profile/{{ profile.userId }}">Full profile</a>
     </p>
   </div>
   <div>
@@ -19,7 +20,7 @@ profile.userId }}{% endblock %} {% block content %}
 <section class="pipeline-card" aria-live="polite">
   <div class="pipeline-head">
     <div>
-      <div class="eyebrow">Actual request stages</div>
+      <div class="eyebrow">Measured request stages</div>
       <h2>Recommendation pipeline</h2>
     </div>
     <span id="pipeline-state">Ready</span>
@@ -32,19 +33,19 @@ profile.userId }}{% endblock %} {% block content %}
 <section id="results" hidden>
   <div class="section-heading">
     <div>
-      <br>
       <div class="eyebrow">Top 10 results</div>
       <h2>Model comparison</h2>
     </div>
     <p id="generated-at" class="caption"></p>
   </div>
   <div class="model-tabs" id="model-tabs"></div>
-  <div id="recommendation-cards" class="movie-grid"></div>
+  <p id="model-description" class="caption wide"></p>
   <div class="metrics-grid" id="metrics-grid"></div>
+  <div id="recommendation-cards" class="movie-grid"></div>
   <div class="changes-card">
     <div>
       <div class="eyebrow">Before / after</div>
-      <h2>What changed?</h2>
+      <h2>What changed since the last session?</h2>
     </div>
     <div id="changes"></div>
   </div>

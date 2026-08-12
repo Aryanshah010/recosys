@@ -1,53 +1,42 @@
-{% extends "base.html" %} {% block title %}CineThesis · Personalized Movie
+{% extends "base.html" %} {% block title %}CineThesis · Localized Hybrid
 Recommender{% endblock %} {% block content %}
 <section class="hero">
   <div>
-    <div class="eyebrow">Hybrid ML demonstration · BSc Computing thesis</div>
-    <h1>See a recommender<br />learn in real time.</h1>
+    <div class="eyebrow">Hybrid recommender · BSc Computing thesis</div>
+    <h1>Does a cohort signal<br />change what you see?</h1>
     <p class="caption wide">
-      Select a synthetic Nepali IT student, explore recommendations from four
-      models, rate a film, and immediately inspect the resulting ranking and
-      diversity changes.
+      Pick a user from the modelled cohort, generate recommendations from all
+      six evaluated models, rate a film, and watch the rankings and diversity
+      metrics move. The models on screen are the same six the thesis reports.
     </p>
   </div>
   <div class="hero-note">
-    <b>Live demo flow</b
-    ><span>profile → model pipeline → rate → re-rank → compare</span>
+    <b>Demo flow</b><span>profile → six models → rate → re-rank → compare</span>
   </div>
 </section>
 
 <section class="section-gap">
   <div class="section-heading">
     <div>
-      <div class="eyebrow">synthetic cohort</div>
+      <div class="eyebrow">modelled cohort</div>
       <h2>Select a user to begin</h2>
     </div>
     <p class="caption">
-      One sample per archetype (35% Hollywood · 20% Anime · 20% Bollywood · 15%
-      K-drama · 10% Mixed) — the selection opens an interactive dashboard; no
-      recommendations are pre-rendered.
+      Four users per archetype. Shares are a design assumption, stress-tested in
+      the archetype-mix sweep rather than presented as measured.
     </p>
   </div>
 
-  {% if featured %}
+  {% for group in groups %}
   <div class="archetype-group">
-    <h3 class="archetype-label">Featured</h3>
-    <div class="grid-users">
-      {% for u in featured %}<a class="user-tile" href="/dashboard/{{ u.id }}"
-        ><div class="avatar">{{ u.archetype[0]|upper }}</div>
-        <div>
-          <div class="archetype">{{ u.archetype }} profile</div>
-          <div class="uid">
-            User #{{ u.id }} · {{ u.education }} · age {{ u.age }}
-          </div>
-        </div>
-        <span>→</span></a
-      >{% endfor %}
-    </div>
-  </div>
-  {% endif %} {% for group in groups %}
-  <div class="archetype-group">
-    <h3 class="archetype-label">{{ group.archetype }}</h3>
+    <h3 class="archetype-label">
+      {{ group.archetype }}
+      <span class="share"
+        >{{ group.share }}%{% if group.language %} · {{ group.language }}{% else
+        %} · no dominant language{% endif %}</span
+      >
+    </h3>
+    {% if group.users %}
     <div class="grid-users">
       {% for u in group.users %}<a
         class="user-tile"
@@ -62,6 +51,10 @@ Recommender{% endblock %} {% block content %}
         <span>→</span></a
       >{% endfor %}
     </div>
+    {% else %}
+    <!-- Seed with: python seed_db.py -->
+    <p class="caption">No users seeded yet.</p>
+    {% endif %}
   </div>
   {% endfor %}
 
@@ -69,7 +62,7 @@ Recommender{% endblock %} {% block content %}
     <label for="jump-user-id" class="caption"
       >Or jump to a specific user ID</label
     >
-    <input id="jump-user-id" type="number" min="1" placeholder="e.g. 217" />
+    <input id="jump-user-id" type="number" min="1" placeholder="e.g. 900217" />
     <button class="quiet-btn" type="submit">Go →</button>
   </form>
 </section>

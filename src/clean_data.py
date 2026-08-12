@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import os
 import re
@@ -40,10 +41,13 @@ REQUIRED_MOVIE_COLUMNS = [
     "language",
     "overview",
     "release_year",
+    "runtime",
     "vote_average",
     "vote_count",
     "popularity",
 ]
+
+TELEVISION_EXCLUSIONS_PATH = os.path.join(PROCESSED_DIR, "television_exclusions.json")
 
 
 def check_file_exists(path: str) -> None:
@@ -61,7 +65,7 @@ def parse_tmdb_genre_names(genre_str: str) -> list[str]:
     try:
         genres = ast.literal_eval(genre_str)
         return [g["name"] for g in genres if "name" in g]
-    except (ValueError, SyntaxError, TypeError):
+    except ValueError, SyntaxError, TypeError:
         return []
 
 
@@ -151,6 +155,43 @@ def load_tmdb_metadata() -> pd.DataFrame:
     return tmdb
 
 
+def load_television_exclusions() -> set[int]:
+    """TMDB ids of series and miniseries the raw dump mislabels as movies.
+
+    Built by ``src/television_filter.py`` and committed, so the catalogue is
+    reproducible without network access. Missing file is not fatal -- the
+    pipeline still runs, it just cannot remove television.
+    """
+    if not os.path.exists(TELEVISION_EXCLUSIONS_PATH):
+        logger.warning(
+            "%s not found: television records cannot be removed. Regenerate it "
+            "with `python -m src.television_filter`.",
+            TELEVISION_EXCLUSIONS_PATH,
+        )
+        return set()
+
+    with open(TELEVISION_EXCLUSIONS_PATH) as fh:
+        payload = json.load(fh)
+    return {int(t) for t in payload.get("excluded_tmdb_ids", [])}
+
+
+def drop_television(catalog: pd.DataFrame) -> pd.DataFrame:
+    
+    excluded = load_television_exclusions()
+    if not excluded:
+        return catalog
+
+    before = len(catalog)
+    catalog = catalog[~catalog["tmdbId"].isin(excluded)]
+    logger.info(
+        "Removed %d television records (series and miniseries): %d -> %d movies.",
+        before - len(catalog),
+        before,
+        len(catalog),
+    )
+    return catalog
+
+
 def build_unified_catalog() -> pd.DataFrame:
 
     logger.info("STEP 1: Building unified catalog (MovieLens + TMDB)")
@@ -169,6 +210,7 @@ def build_unified_catalog() -> pd.DataFrame:
             "original_language",
             "overview",
             "release_date",
+            "runtime",
             "vote_average",
             "vote_count",
             "popularity",
@@ -222,8 +264,11 @@ def build_unified_catalog() -> pd.DataFrame:
     catalog["vote_average"] = catalog["vote_average"].fillna(0.0)
     catalog["vote_count"] = catalog["vote_count"].fillna(0).astype("Int64")
     catalog["popularity"] = catalog["popularity"].fillna(0.0)
+    catalog["runtime"] = pd.to_numeric(catalog["runtime"], errors="coerce")
     catalog["movieId"] = catalog["movieId"].astype("Int64")
     catalog["tmdbId"] = catalog["tmdbId"].astype("Int64")
+
+    catalog = drop_television(catalog)
 
     before_floor = len(catalog)
     vote_floor = catalog["language"].map(
@@ -253,6 +298,7 @@ def build_unified_catalog() -> pd.DataFrame:
             "language",
             "overview",
             "release_year",
+            "runtime",
             "vote_average",
             "vote_count",
             "popularity",

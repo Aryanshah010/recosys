@@ -1,0 +1,88 @@
+{# Shared building blocks for the results pages. Every results table on
+/metrics, /bias and /cohort is the same shape -- headers from the first row's
+keys, one
+<td class="num">
+  per value -- so it lives here once. #} {# `highlight` and `warn` are (column,
+  value) pairs, e.g. ('Model', 'Localized_Hybrid'). Jinja has no lambdas, so the
+  predicate is expressed as data rather than as a callable. #} {% macro
+  data_table(rows, highlight=none, warn=none, empty="No data yet.") %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% if rows %}{% for key in rows[0].keys() %}
+          <th>{{ key|replace('_', ' ') }}</th>
+          {% endfor %}{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr
+          class="{% if warn and row[warn[0]] == warn[1] %}warn{% elif highlight and row[highlight[0]] == highlight[1] %}highlight{% endif %}"
+        >
+          {% for value in row.values() %}
+          <td class="num">{{ value }}</td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr>
+          <td class="empty">{{ empty }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endmacro %} {# Two-column comparison table used for the prior-vs-derived
+  affinity tables. #} {% macro comparison_table(rows, key_header, scroll=false,
+  emphasise=false) %}
+  <div class="table-wrap{% if scroll %} scroll-y{% endif %}">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ key_header }}</th>
+          <th>Prior (hand-set)</th>
+          <th>Derived (from data)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.Key }}</td>
+          <td class="num muted">{{ row.Prior_HandSet }}</td>
+          <td class="num{% if emphasise %} highlight-cell{% endif %}">
+            {{ row.Derived_FromData }}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td class="empty">No data yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endmacro %} {% macro track_toggle(path, tracks, track_labels, current) %}
+  <div class="track-toggle">
+    {% for t in tracks %}<a
+      href="{{ path }}?track={{ t }}"
+      class="{{ 'active' if t == current else '' }}"
+      >{{ track_labels[t] }}</a
+    >{% endfor %}
+  </div>
+  {% endmacro %} {% macro figure_row(figures, alt) %} {% if figures %}
+  <div class="figure-row">
+    {% for src in figures %}
+    <figure class="figure">
+      <img src="{{ src }}" alt="{{ alt }}" loading="lazy" />
+    </figure>
+    {% endfor %}
+  </div>
+  {% endif %} {% endmacro %} {# Collapsed methodology note. Keeps the page
+  readable as a demo while leaving the full protocol one click away. #} {% macro
+  method(summary="How this was measured") %}
+  <details class="method">
+    <summary>{{ summary }}</summary>
+    <div class="method-body">{{ caller() }}</div>
+  </details>
+  {% endmacro %}
+</td>

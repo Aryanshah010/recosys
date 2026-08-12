@@ -1,5 +1,3 @@
-"""Single entry point that executes the full sequential pipeline: 1."""
-
 import os
 import subprocess
 import sys
@@ -16,39 +14,61 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 PIPELINE_STEPS = [
     (
         SRC_DIR / "clean_data.py",
-        "Step 1/6: Data Cleaning & ETL (MovieLens + TMDb Fusion)",
+        "Step 1/8: Data Cleaning & ETL (MovieLens + TMDb Fusion)",
         ["movies_final.csv", "ratings_final.csv"],
     ),
     (
         SRC_DIR / "build_cbf_matrix.py",
-        "Step 2/6: Building CBF Matrix (TF-IDF over genres + synopses)",
+        "Step 2/8: Building CBF Matrix (TF-IDF over genres + synopses)",
         ["cbf_matrix.pkl", "cbf_metadata.pkl"],
     ),
     (
         SRC_DIR / "build_real_cohort.py",
-        "Step 3/6: Selecting Real Proxy Cohort + Deriving Affinity Tables",
+        "Step 3/8: Selecting Real Proxy Cohort + Deriving Affinity Tables",
         [
             "real_cohort_users.csv",
             "real_cohort_ratings.csv",
             "cf_excluded_user_ids.json",
             "archetype_affinity.pkl",
             "cohort_affinity_tables.json",
+            "benchmark_population_profile.csv",
+            "derived_affinity_tables.csv",
+            "real_cohort_sampling_audit.csv",
         ],
     ),
     (
         SRC_DIR / "generate_synthetic_cohort.py",
-        "Step 4/6: Generating Synthetic Cohort (behaviour-seeded)",
+        "Step 4/8: Generating Synthetic Cohort (behaviour-seeded)",
         ["synthetic_users.csv", "synthetic_ratings.csv"],
     ),
     (
         ENGINE_DIR / "collaborative_filtering.py",
-        "Step 5/6: Training SVD CF Model (evaluation cohort excluded)",
+        "Step 5/8: Training SVD CF Model (evaluation cohort excluded)",
         ["svd_model.pkl"],
     ),
     (
         EVALUATION_DIR / "evaluation_metrics.py",
-        "Step 6/6: Master Evaluation (real + synthetic tracks)",
-        ["evaluation_user_level.csv"],
+        "Step 6/8: Master Evaluation (real + synthetic tracks)",
+        [
+            "evaluation_user_level.csv",
+            "rq1_model_performance_real.csv",
+            "rq1_significance_tests_real.csv",
+            "rq2_diversity_by_model_real.csv",
+        ],
+    ),
+    (
+        EVALUATION_DIR / "sensitivity_analysis.py",
+        "Step 7/8: Sensitivity Analysis (lambda sweep + archetype mix)",
+        [
+            "sensitivity_affinity_tables.csv",
+            "sensitivity_lambda_summary_real.csv",
+            "sensitivity_lambda_summary_synthetic.csv",
+        ],
+    ),
+    (
+        EVALUATION_DIR / "make_figures.py",
+        "Step 8/8: Generating Figures",
+        [os.path.join("figures", "13_tradeoff_curve_synthetic.png")],
     ),
 ]
 
@@ -77,7 +97,7 @@ def check_artifacts(artifacts: list[str], context: str) -> bool:
             missing.append(artifact)
 
     if missing:
-        print(f"\nWARNING: Missing artifacts after {context}:")
+        print(f"\nERROR: Missing artifacts after {context}:")
         for m in missing:
             print(f"  x {m}")
         return False
@@ -153,16 +173,21 @@ def main():
             print("  Fix the error above and re-run: python main.py")
             sys.exit(1)
 
-        check_artifacts(artifacts, description)
+        if not check_artifacts(artifacts, description):
+            print_banner("PIPELINE HALTED", "!")
+            print(f"  Step {i}/{total_steps} did not produce its expected artifacts.")
+            sys.exit(1)
         completed_steps += 1
 
     total_elapsed = time.time() - pipeline_start
     print_banner("PIPELINE COMPLETE")
     print(f"  Steps completed:  {completed_steps}/{total_steps}")
     print(f"  Total time:       {total_elapsed:.1f}s ({total_elapsed / 60:.1f} min)")
-    print(f"  Results saved to: {RESULTS_DIR / 'evaluation_user_level.csv'}")
-    print("\n  SVD trained on MovieLens only; synthetic users are evaluation-only.")
-    print("  Use Filter_Bubble_Score column for Chapter 5 (RQ2/Ethics).")
+    print(f"  Results saved to: {RESULTS_DIR}")
+    print("\n  The evaluation cohort is excluded from SVD training by construction.")
+    print("  RQ1 tables: rq1_*_{real,synthetic}.csv")
+    print("  RQ2 tables: rq2_*_{real,synthetic}.csv")
+    print("  Demo:       python seed_db.py && uvicorn api.main:app")
     print()
 
 

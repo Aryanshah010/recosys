@@ -1,9 +1,8 @@
-"""FastAPI routes for the interactive thesis demonstration."""
-
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -21,12 +20,26 @@ from api.models import (
     SyntheticUser,
     UserRating,
 )
-from api.recommender_service import MODEL_LABELS, get_service
+from api.recommender_service import (
+    MODEL_DESCRIPTIONS,
+    MODEL_LABELS,
+    MODEL_ORDER,
+    MODEL_WEIGHTS,
+    get_service,
+)
+from src.cohort_spec import ARCHETYPE_SPECS
 
 router = APIRouter()
 templates = Jinja2Templates(directory="api/templates")
 RESULTS_DIR = Path("results")
-MODELS = ["cf", "cbf", "hybrid", "localized"]
+FIGURES_DIR = RESULTS_DIR / "figures"
+TRACKS = ("real", "synthetic")
+TRACK_LABELS = {
+    "real": "Real proxy cohort",
+    "synthetic": "Synthetic cohort",
+}
+USERS_PER_ARCHETYPE = 4
+NOT_FOUND = "Cohort user not found."
 
 
 class GenerationRequest(BaseModel):
@@ -37,8 +50,36 @@ class RatingRequest(GenerationRequest):
     rating: float = Field(ge=1, le=5)
 
 
+def _read_results(name: str) -> list[dict]:
+    path = RESULTS_DIR / name
+    if not path.exists():
+        return []
+    return pd.read_csv(path).to_dict("records")
+
+
+def _resolve_track(track: str) -> str:
+    return track if track in TRACKS else "real"
+
+
+def _figure(stem: str) -> str | None:
+    
+    matches = sorted(FIGURES_DIR.glob(f"*_{stem}.png")) if FIGURES_DIR.exists() else []
+    return f"/figures/{matches[0].name}" if matches else None
+
+
+def _figures(*stems: str) -> list[str]:
+    return [src for src in (_figure(s) for s in stems) if src]
+
+
+def cohort_profile(user_id: int) -> dict:
+    """Resolve a cohort user or 404. Used as a dependency by every user page."""
+    profile = get_service().get_user_profile(user_id)
+    if profile is None:
+        raise HTTPException(404, NOT_FOUND)
+    return profile
+
+
 def _manual_ratings(db: Session, user_id: int) -> list[dict]:
-    """Use the latest persisted value per movie while retaining all interactions."""
     ratings = (
         db.query(UserRating)
         .filter(UserRating.user_id == user_id)
@@ -56,8 +97,10 @@ def _previous_recommendations(db: Session, user_id: int) -> dict[str, list[dict]
         .order_by(RecommendationSession.id.desc())
         .first()
     )
+    previous: dict[str, list[dict]] = {model: [] for model in MODEL_ORDER}
     if session is None:
-        return {model: [] for model in MODELS}
+        return previous
+
     logs = (
         db.query(RecommendationLog)
         .filter(RecommendationLog.session_id == session.id)
@@ -65,19 +108,14 @@ def _previous_recommendations(db: Session, user_id: int) -> dict[str, list[dict]
         .all()
     )
     service = get_service()
-    previous = {model: [] for model in MODELS}
     for item in logs:
-        if item.model_name is None or item.movie_id is None or item.rank is None:
+        if item.model_name not in previous:
             continue
-        model_name = item.model_name
-        movie_id = item.movie_id
-        if model_name not in previous:
-            continue
-        previous[model_name].append(
+        previous[item.model_name].append(
             {
-                "movieId": movie_id,
+                "movieId": item.movie_id,
                 "rank": item.rank,
-                "title": (service.movie(movie_id) or {}).get("title", str(movie_id)),
+                "title": service.title(item.movie_id),
             }
         )
     return previous
@@ -109,116 +147,125 @@ def _change_summary(before: list[dict], after: list[dict]) -> dict:
 def _generate(db: Session, payload: GenerationRequest, trigger: str) -> dict:
     svc = get_service()
     if svc.get_user_profile(payload.user_id) is None:
-        raise HTTPException(404, "Synthetic user not found.")
-    before = _previous_recommendations(db, payload.user_id)
-    manual = _manual_ratings(db, payload.user_id)
-    session = RecommendationSession(
-        user_id=payload.user_id, trigger=trigger, weights_json="{}"
+        raise HTTPException(404, "Cohort user not found.")
+
+    stages: list[dict] = []
+
+    def stage(name: str, fn):
+        started = time.perf_counter()
+        value = fn()
+        stages.append(
+            {"stage": name, "ms": round((time.perf_counter() - started) * 1000, 1)}
+        )
+        return value
+
+    before = stage(
+        "Loading previous session",
+        lambda: _previous_recommendations(db, payload.user_id),
     )
+    manual = stage(
+        "Reading persisted ratings", lambda: _manual_ratings(db, payload.user_id)
+    )
+
+    session = RecommendationSession(user_id=payload.user_id, trigger=trigger)
     db.add(session)
     db.flush()
-    results, metrics, applied_weights = {}, {}, {}
-    for model in MODELS:
-        recs, applied = svc.recommend(payload.user_id, model, manual, None)
-        applied_weights[model] = applied
+    session_id = session.id
+
+    results, metrics = {}, {}
+    for model in MODEL_ORDER:
+        recs = stage(
+            f"Scoring {MODEL_LABELS[model]}",
+            lambda model=model: svc.recommend(payload.user_id, model, manual),
+        )
         live = svc.live_metrics(payload.user_id, recs)
         results[model] = {
             "label": MODEL_LABELS[model],
+            "description": MODEL_DESCRIPTIONS[model],
+            "weights": MODEL_WEIGHTS[model],
             "recommendations": recs,
-            "weights": applied,
         }
         metrics[model] = live
-        for item in recs:
-            db.add(
-                RecommendationLog(
-                    user_id=payload.user_id,
-                    session_id=session.id,
-                    model_name=model,
-                    movie_id=item["movieId"],
-                    rank=item["rank"],
-                    score=item["score"],
-                )
+
+        db.add_all(
+            RecommendationLog(
+                session_id=session_id,
+                user_id=payload.user_id,
+                model_name=model,
+                movie_id=item["movieId"],
+                rank=item["rank"],
+                score=item["score"],
             )
+            for item in recs
+        )
         db.add(
             EvaluationLog(
-                session_id=session.id,
+                session_id=session_id,
                 user_id=payload.user_id,
                 model_name=model,
                 metrics_json=json.dumps(live),
             )
         )
-    session.weights_json = json.dumps(applied_weights.get("localized", {}))
-    db.commit()
+
+    stage("Persisting session", db.commit)
+
     return {
-        "session_id": session.id,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "session_id": session_id,
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "trigger": trigger,
         "results": results,
         "metrics": metrics,
         "changes": {
             model: _change_summary(before[model], results[model]["recommendations"])
-            for model in MODELS
+            for model in MODEL_ORDER
         },
-        "pipeline": [
-            "Saving rating" if trigger == "rating" else "Reading saved ratings",
-            "Updating SQLite",
-            "Updating user profile",
-            "Generating user vector",
-            "Running Collaborative Filtering",
-            "Running Content-Based Filtering",
-            "Running SVD predictions",
-            "Running Localized Hybrid",
-            "Ranking movies",
-            "Computing live metrics",
-            "Finished",
-        ],
+        "pipeline": stages,
     }
-
-
-ARCHETYPES = ("hollywood", "anime", "bollywood", "kdrama", "mixed")
-USERS_PER_ARCHETYPE = 4
-FEATURED_USER_IDS: list[int] = []
 
 
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request, db: Session = Depends(get_db)):
-    featured = (
-        db.query(SyntheticUser).filter(SyntheticUser.id.in_(FEATURED_USER_IDS)).all()
-        if FEATURED_USER_IDS
-        else []
-    )
     groups = [
         {
-            "archetype": archetype,
+            "archetype": spec["name"],
+            "share": round(spec["target_share"] * 100),
+            "language": spec["language"],
             "users": db.query(SyntheticUser)
-            .filter(SyntheticUser.archetype == archetype)
+            .filter(SyntheticUser.archetype == spec["name"])
             .order_by(SyntheticUser.id)
             .limit(USERS_PER_ARCHETYPE)
             .all(),
         }
-        for archetype in ARCHETYPES
+        for spec in sorted(
+            ARCHETYPE_SPECS, key=lambda s: s["target_share"], reverse=True
+        )
     ]
-    return templates.TemplateResponse(
-        request, "landing.html", {"groups": groups, "featured": featured}
-    )
+    return templates.TemplateResponse(request, "landing.html", {"groups": groups})
 
 
 @router.get("/profile/{user_id}", response_class=HTMLResponse)
-def profile(request: Request, user_id: int, db: Session = Depends(get_db)):
-    value = get_service().get_user_profile(user_id)
-    if value is None:
-        raise HTTPException(404, "Synthetic user not found.")
+def profile(
+    request: Request,
+    user_id: int,
+    value: dict = Depends(cohort_profile),
+    db: Session = Depends(get_db),
+):
     value["manual_rating_count"] = len(_manual_ratings(db, user_id))
-    return templates.TemplateResponse(request, "profile.html", {"profile": value})
+    sessions = (
+        db.query(RecommendationSession)
+        .filter(RecommendationSession.user_id == user_id)
+        .order_by(RecommendationSession.id.desc())
+        .limit(8)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request, "profile.html", {"profile": value, "sessions": sessions}
+    )
 
 
 @router.get("/dashboard/{user_id}", response_class=HTMLResponse)
-def dashboard(request: Request, user_id: int):
-    profile_value = get_service().get_user_profile(user_id)
-    if profile_value is None:
-        raise HTTPException(404, "Synthetic user not found.")
-    return templates.TemplateResponse(
-        request, "dashboard.html", {"profile": profile_value}
-    )
+def dashboard(request: Request, value: dict = Depends(cohort_profile)):
+    return templates.TemplateResponse(request, "dashboard.html", {"profile": value})
 
 
 @router.get("/movie/{movie_id}", response_class=HTMLResponse)
@@ -228,10 +275,14 @@ def movie_detail(
     user_id: int = Query(...),
     db: Session = Depends(get_db),
 ):
-    movie = get_service().movie(movie_id)
-    profile_value = get_service().get_user_profile(user_id)
-    if movie is None or profile_value is None:
-        raise HTTPException(404, "Movie or synthetic user not found.")
+    svc = get_service()
+    profile_value = svc.get_user_profile(user_id)
+    if profile_value is None:
+        raise HTTPException(404, NOT_FOUND)
+    svc.warm_posters([movie_id])
+    movie = svc.movie(movie_id)
+    if movie is None:
+        raise HTTPException(404, "Movie not found.")
     current = next(
         (item for item in _manual_ratings(db, user_id) if item["movie_id"] == movie_id),
         None,
@@ -263,65 +314,88 @@ def rate_movie(movie_id: int, payload: RatingRequest, db: Session = Depends(get_
     return _generate(db, payload, "rating")
 
 
-@router.get("/api/movies/{movie_id}")
-def movie_api(movie_id: int):
-    movie = get_service().movie(movie_id)
-    if movie is None:
-        raise HTTPException(404, "Movie not found.")
-    return movie
-
-
-@router.get("/api/recommend/{user_id}")
-def recommend_api(
-    user_id: int,
-    model: str = Query(..., pattern="^(cf|cbf|hybrid|localized)$"),
-    db: Session = Depends(get_db),
-):
-    recs, _ = get_service().recommend(user_id, model, _manual_ratings(db, user_id))
-    return {"userId": user_id, "model": model, "results": recs}
-
-
-def _display_model_names(rows: list[dict]) -> list[dict]:
-    for row in rows:
-        for key in ("Model", "Model_A", "Model_B"):
-            if row.get(key) == "MF_ColdStart":
-                row[key] = "CF_ColdStart"
-    return rows
+def _track_context(track: str) -> dict:
+    return {
+        "track": track,
+        "track_label": TRACK_LABELS[track],
+        "tracks": TRACKS,
+        "track_labels": TRACK_LABELS,
+    }
 
 
 @router.get("/metrics", response_class=HTMLResponse)
-def metrics_page(request: Request):
-    perf = RESULTS_DIR / "rq1_model_performance.csv"
-    sig = RESULTS_DIR / "rq1_significance_tests.csv"
+def metrics_page(request: Request, track: str = Query("real")):
+    track = _resolve_track(track)
     return templates.TemplateResponse(
         request,
         "metrics.html",
-        {
-            "performance": _display_model_names(pd.read_csv(perf).to_dict("records"))
-            if perf.exists()
-            else [],
-            "significance": _display_model_names(pd.read_csv(sig).to_dict("records"))
-            if sig.exists()
-            else [],
+        _track_context(track)
+        | {
+            "performance": _read_results(f"rq1_model_performance_{track}.csv"),
+            "headline": _read_results(f"rq1_headline_effect_{track}.csv"),
+            "significance": _read_results(f"rq1_significance_tests_{track}.csv"),
+            "intervals": _read_results(f"rq1_confidence_intervals_{track}.csv"),
+            "figure": _figure(f"rq1_performance_{track}"),
         },
     )
 
 
 @router.get("/bias", response_class=HTMLResponse)
-def bias_page(request: Request):
-    div, fb = (
-        RESULTS_DIR / "rq2_diversity_by_model.csv",
-        RESULTS_DIR / "rq2_filter_bubble_by_archetype.csv",
-    )
+def bias_page(request: Request, track: str = Query("real")):
+    track = _resolve_track(track)
     return templates.TemplateResponse(
         request,
         "bias.html",
+        _track_context(track)
+        | {
+            "diversity": _read_results(f"rq2_diversity_by_model_{track}.csv"),
+            "filter_bubble": _read_results(
+                f"rq2_filter_bubble_by_archetype_{track}.csv"
+            ),
+            "by_archetype": _read_results(f"rq2_performance_by_archetype_{track}.csv"),
+            "sweep": _read_results(f"sensitivity_lambda_summary_{track}.csv"),
+            "figures": _figures(
+                f"rq2_diversity_{track}",
+                f"rq2_bubble_by_archetype_{track}",
+                f"tradeoff_curve_{track}",
+            ),
+        },
+    )
+
+
+@router.get("/cohort", response_class=HTMLResponse)
+def cohort_page(request: Request):
+    affinity = _read_results("sensitivity_affinity_tables.csv")
+    benchmark = _read_results("benchmark_population_profile.csv")
+
+    # Derived, not narrated. These shares were previously hardcoded in the
+    # template and would silently go stale on every pipeline re-run.
+    shares = {
+        str(row["Archetype"]): float(row["Benchmark_Share_%"])
+        for row in benchmark
+        if "Benchmark_Share_%" in row
+    }
+    minority = [
+        spec["name"]
+        for spec in ARCHETYPE_SPECS
+        if spec["language"] not in (None, "English")
+    ]
+
+    return templates.TemplateResponse(
+        request,
+        "cohort.html",
         {
-            "diversity": _display_model_names(pd.read_csv(div).to_dict("records"))
-            if div.exists()
-            else [],
-            "filter_bubble": _display_model_names(pd.read_csv(fb).to_dict("records"))
-            if fb.exists()
-            else [],
+            "benchmark": benchmark,
+            "sampling": _read_results("real_cohort_sampling_audit.csv"),
+            "languages": [r for r in affinity if r.get("Type") == "language"],
+            "genres": [r for r in affinity if r.get("Type") == "genre"],
+            "catalogue_size": get_service().catalogue_size,
+            "english_share": round(shares["hollywood"], 2) if shares else None,
+            "cohort_share": (
+                round(sum(shares.get(name, 0.0) for name in minority), 2)
+                if shares
+                else None
+            ),
+            "figures": _figures("benchmark_representation_gap", "track_comparison"),
         },
     )

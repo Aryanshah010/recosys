@@ -1,5 +1,3 @@
-"""Sensitivity analyses for the cohort-affinity model."""
-
 from __future__ import annotations
 
 import logging
@@ -17,6 +15,7 @@ from src.localization_config import (
     COHORT_LANGUAGE_AFFINITY,
     PRIOR_GENRE_AFFINITY,
     PRIOR_LANGUAGE_AFFINITY,
+    STANDARD_HYBRID_WEIGHTS,
 )
 
 logging.basicConfig(
@@ -37,21 +36,21 @@ ALTERNATIVE_MIXES: dict[str, dict[str, float]] = {
         "hollywood": 0.55,
         "anime": 0.15,
         "bollywood": 0.15,
-        "kdrama": 0.10,
+        "korean": 0.10,
         "mixed": 0.05,
     },
     "regional_heavy": {
         "hollywood": 0.20,
         "anime": 0.20,
         "bollywood": 0.30,
-        "kdrama": 0.20,
+        "korean": 0.20,
         "mixed": 0.10,
     },
     "high_diversity": {
         "hollywood": 0.25,
         "anime": 0.15,
         "bollywood": 0.15,
-        "kdrama": 0.15,
+        "korean": 0.15,
         "mixed": 0.30,
     },
     "uniform": {name: 0.20 for name in ARCHETYPE_NAMES},
@@ -63,7 +62,6 @@ def _rank_top_k(scored: list[tuple[int, float]], k: int) -> list[int]:
 
 
 def affinity_weight_sweep(track: str = "real") -> pd.DataFrame:
-    """Sweep the affinity weight and record accuracy against diversity."""
     shared = em.load_shared_artifacts()
     (svd, cbf_matrix, movie_ids, movie_index, clean_genres, language, quality) = shared
 
@@ -72,7 +70,7 @@ def affinity_weight_sweep(track: str = "real") -> pd.DataFrame:
     profiles = users_df.set_index("userId").to_dict("index")
     pop_bins = em.build_popularity_bins(quality)
 
-    eval_uids = sorted(splits)[: em.MAX_EVAL_USERS]
+    eval_uids = em.select_eval_users(splits)
     logger.info("Lambda sweep on track '%s' over %d users.", track, len(eval_uids))
 
     records = []
@@ -106,8 +104,6 @@ def affinity_weight_sweep(track: str = "real") -> pd.DataFrame:
             candidates, movie_index, clean_genres, language, pref_genres, pref_languages
         )
 
-        base_cf, base_cbf = 0.625, 0.375
-
         for lam in LAMBDA_GRID:
             scale = 1.0 - lam
             scored = []
@@ -116,8 +112,8 @@ def affinity_weight_sweep(track: str = "real") -> pd.DataFrame:
                 if idx is None:
                     continue
                 score = (
-                    scale * base_cf * float(cf_norm.get(mid, 0.0))
-                    + scale * base_cbf * float(cbf_arr[idx])
+                    scale * STANDARD_HYBRID_WEIGHTS.cf * float(cf_norm.get(mid, 0.0))
+                    + scale * STANDARD_HYBRID_WEIGHTS.cbf * float(cbf_arr[idx])
                     + lam * float(aff_norm.get(mid, 0.0))
                 )
                 scored.append((mid, score))
@@ -156,7 +152,7 @@ def affinity_weight_sweep(track: str = "real") -> pd.DataFrame:
         "Language_Diversity",
         "Genre_Diversity",
         "Filter_Bubble_Score",
-        "Novelty@10",
+        "Preference_Escape@10",
     ]
     summary = mean_frame(per_user, "Lambda", summary_columns).reset_index()
 
@@ -170,7 +166,6 @@ def affinity_weight_sweep(track: str = "real") -> pd.DataFrame:
 
 
 def archetype_mix_sweep(per_user: pd.DataFrame, track: str = "real") -> pd.DataFrame:
-    """Re-weight results under alternative assumed archetype mixes."""
     user_level_path = f"{RESULTS_DIR}/evaluation_user_level.csv"
     if not os.path.exists(user_level_path):
         logger.warning("No %s; skipping archetype mix sweep.", user_level_path)
@@ -197,7 +192,7 @@ def archetype_mix_sweep(per_user: pd.DataFrame, track: str = "real") -> pd.DataF
                 if share <= 0 or obs <= 0:
                     continue
                 weighted_ndcg += share * to_float(sub["NDCG@10"].mean())
-                weighted_novelty += share * to_float(sub["Novelty@10"].mean())
+                weighted_novelty += share * to_float(sub["Preference_Escape@10"].mean())
                 total_w += share
             if total_w > 0:
                 rows.append(
@@ -205,7 +200,7 @@ def archetype_mix_sweep(per_user: pd.DataFrame, track: str = "real") -> pd.DataF
                         "Mix": mix_name,
                         "Model": model,
                         "NDCG@10": round(weighted_ndcg / total_w, 4),
-                        "Novelty@10": round(weighted_novelty / total_w, 4),
+                        "Preference_Escape@10": round(weighted_novelty / total_w, 4),
                     }
                 )
 
@@ -226,7 +221,6 @@ def archetype_mix_sweep(per_user: pd.DataFrame, track: str = "real") -> pd.DataF
 
 
 def affinity_table_comparison() -> pd.DataFrame:
-    """Contrast the data-derived affinity tables with the hand-set prior."""
     rows = []
     for key in sorted(set(PRIOR_GENRE_AFFINITY) | set(COHORT_GENRE_AFFINITY)):
         rows.append(
@@ -262,9 +256,12 @@ def main() -> None:
 
     affinity_table_comparison()
 
-    track = "real" if os.path.exists(em.TRACKS["real"]["ratings"]) else "synthetic"
-    per_user = affinity_weight_sweep(track)
-    archetype_mix_sweep(per_user, track)
+    for track, cfg in em.TRACKS.items():
+        if not os.path.exists(cfg["ratings"]):
+            logger.warning("Track '%s' ratings missing; skipping.", track)
+            continue
+        per_user = affinity_weight_sweep(track)
+        archetype_mix_sweep(per_user, track)
 
     logger.info("Sensitivity analysis complete.")
 
