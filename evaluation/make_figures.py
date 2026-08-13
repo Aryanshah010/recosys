@@ -7,6 +7,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import contextlib
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -55,6 +57,8 @@ plt.rcParams.update(
 def _save(fig, name: str) -> None:
     os.makedirs(FIG_DIR, exist_ok=True)
     path = os.path.join(FIG_DIR, name)
+    with contextlib.suppress(Exception):
+        fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
     logger.info("Wrote %s", path)
@@ -149,7 +153,7 @@ def fig_model_performance(track: str, idx: int) -> None:
     available = [m for m in metrics if f"{m}_mean" in df.columns]
     df = df.set_index("Model").reindex(MODEL_ORDER).dropna(how="all")
 
-    fig, axes = plt.subplots(1, len(available), figsize=(4 * len(available), 4.2))
+    fig, axes = plt.subplots(1, len(available), figsize=(4.5 * len(available), 5.5))
     if len(available) == 1:
         axes = [axes]
 
@@ -178,7 +182,7 @@ def fig_diversity(track: str, idx: int) -> None:
 
     df = df.set_index("Model").reindex(MODEL_ORDER).dropna(how="all")
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2))
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5.5))
     for ax, col, title in zip(
         axes,
         ["Language_Diversity", "Genre_Diversity", "Preference_Escape@10"],
@@ -218,7 +222,7 @@ def fig_bubble_by_archetype(track: str, idx: int) -> None:
     x = np.arange(len(archetypes))
     width = 0.8 / max(len(df), 1)
 
-    fig, ax = plt.subplots(figsize=(10, 4.6))
+    fig, ax = plt.subplots(figsize=(10, 6.0))
     for i, (model, row) in enumerate(df.iterrows()):
         ax.bar(
             x + i * width,
@@ -236,7 +240,7 @@ def fig_bubble_by_archetype(track: str, idx: int) -> None:
         fontsize=12,
         fontweight="bold",
     )
-    ax.legend(fontsize=8, ncol=3)
+    ax.legend(fontsize=9, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.15))
     _save(fig, f"{idx:02d}_rq2_bubble_by_archetype_{track}.png")
 
 
@@ -302,7 +306,7 @@ def fig_benchmark_representation(idx: int) -> None:
     x = np.arange(len(df))
     width = 0.38
 
-    fig, ax = plt.subplots(figsize=(9, 4.6))
+    fig, ax = plt.subplots(figsize=(10, 6.0))
     ax.bar(
         x - width / 2,
         df["Benchmark_Share_%"],
@@ -328,7 +332,7 @@ def fig_benchmark_representation(idx: int) -> None:
         fontsize=12,
         fontweight="bold",
     )
-    ax.legend()
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2)
 
     for i, (b, t) in enumerate(zip(df["Benchmark_Share_%"], df["Target_Share_%"])):
         ax.text(i - width / 2, b, f"{b:.2f}%", ha="center", va="bottom", fontsize=7)
@@ -354,7 +358,7 @@ def fig_track_comparison(idx: int) -> None:
     tracks = list(summary.columns)
     width = 0.8 / len(tracks)
 
-    fig, ax = plt.subplots(figsize=(9, 4.6))
+    fig, ax = plt.subplots(figsize=(10, 6.0))
     for i, track in enumerate(tracks):
         ax.bar(
             x + i * width,
@@ -371,8 +375,116 @@ def fig_track_comparison(idx: int) -> None:
         fontsize=12,
         fontweight="bold",
     )
-    ax.legend()
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=2)
     _save(fig, f"{idx:02d}_track_comparison.png")
+def fig_performance_by_archetype(track: str, idx: int) -> None:
+    df = _read(f"rq2_performance_by_archetype_{track}.csv")
+    if df is None:
+        return
+
+    df_filtered = df[df["Model"].isin(["NonLocal_Hybrid", "Localized_Hybrid"])].copy()
+    pivot_df = df_filtered.pivot(index="Archetype", columns="Model", values="NDCG@10")
+    
+    archetype_order = ["bollywood", "mixed", "hollywood", "korean", "anime"]
+    pivot_df = pivot_df.reindex(archetype_order)
+    
+    x = np.arange(len(archetype_order))
+    width = 0.35
+    
+    fig, ax = plt.subplots(figsize=(9, 5.0))
+    ax.bar(
+        x - width / 2,
+        pivot_df["NonLocal_Hybrid"],
+        width,
+        label="Non-Localized Hybrid",
+        color="#8d6ab8",
+    )
+    ax.bar(
+        x + width / 2,
+        pivot_df["Localized_Hybrid"],
+        width,
+        label="Localized Hybrid (Proposed)",
+        color="#c8553d",
+    )
+    
+    ax.set_xticks(x)
+    ax.set_xticklabels([a.capitalize() for a in archetype_order], fontsize=9)
+    ax.set_ylabel("NDCG@10", fontsize=10)
+    ax.set_title(
+        f"NDCG@10 Comparison by User Archetype ({track.capitalize()} Cohort)\n"
+        "Localized Hybrid vs Non-Localized Hybrid",
+        fontsize=12,
+        fontweight="bold",
+    )
+    
+    for i in range(len(archetype_order)):
+        val_nonlocal = pivot_df.loc[archetype_order[i], "NonLocal_Hybrid"]
+        val_local = pivot_df.loc[archetype_order[i], "Localized_Hybrid"]
+        ax.text(i - width / 2, val_nonlocal + 0.003, f"{val_nonlocal:.4f}", ha="center", va="bottom", fontsize=8) # type: ignore
+        ax.text(i + width / 2, val_local + 0.003, f"{val_local:.4f}", ha="center", va="bottom", fontsize=8) # type: ignore
+        
+    ax.legend(loc="upper right")
+    _save(fig, f"{idx:02d}_performance_by_archetype_{track}.png")
+
+
+def fig_significance_heatmap(idx: int) -> None:
+    df = _read("rq1_significance_tests_real.csv")
+    if df is None:
+        return
+
+    n_models = len(MODEL_ORDER)
+    dz_matrix = np.zeros((n_models, n_models))
+    text_matrix = np.empty((n_models, n_models), dtype=object)
+
+    for i in range(n_models):
+        text_matrix[i, i] = "-"
+
+    for _, row in df.iterrows():
+        a = row["Model_A"]
+        b = row["Model_B"]
+        if a not in MODEL_ORDER or b not in MODEL_ORDER:
+            continue
+        idx_a = MODEL_ORDER.index(a)
+        idx_b = MODEL_ORDER.index(b)
+        
+        dz = float(row["Cohens_dz"])
+        sig = row["Significant_holm"] == "yes"
+        
+        dz_matrix[idx_a, idx_b] = dz
+        dz_matrix[idx_b, idx_a] = -dz
+        
+        p_val = float(row["p_ttest_holm"])
+        sig_star = ""
+        if sig:
+            if p_val < 0.001:
+                sig_star = "***"
+            elif p_val < 0.01:
+                sig_star = "**"
+            else:
+                sig_star = "*"
+        
+        text_matrix[idx_a, idx_b] = f"{dz:+.2f}{sig_star}" if sig else "ns"
+        text_matrix[idx_b, idx_a] = f"{-dz:+.2f}{sig_star}" if sig else "ns"
+
+    fig, ax = plt.subplots(figsize=(9, 8))
+    im = ax.imshow(dz_matrix, cmap="RdYlBu_r", vmin=-1.0, vmax=1.0)
+    
+    ax.set_xticks(np.arange(n_models))
+    ax.set_yticks(np.arange(n_models))
+    ax.set_xticklabels(MODEL_ORDER, rotation=35, ha="right", fontsize=9)
+    ax.set_yticklabels(MODEL_ORDER, fontsize=9)
+    
+    for i in range(n_models):
+        for j in range(n_models):
+            text = text_matrix[i, j]
+            color = "black" if abs(dz_matrix[i, j]) < 0.4 else "white"
+            ax.text(j, i, text, ha="center", va="center", color=color, fontsize=9, fontweight="bold")
+            
+    cbar = fig.colorbar(im, ax=ax, shrink=0.7)
+    cbar.set_label("Cohen's $d_z$ effect size (positive = column beats row)", fontsize=10)
+    
+    ax.set_title("Holm-Bonferroni Significance & Effect Size Matrix\n(Real Proxy Cohort, NDCG@10 comparison)", fontsize=12, fontweight="bold")
+    _save(fig, f"{idx:02d}_significance_heatmap.png")
 
 
 def main() -> None:
@@ -400,6 +512,14 @@ def main() -> None:
         idx += 1
         fig_tradeoff_curve(track, idx)
         idx += 1
+
+    fig_performance_by_archetype("real", idx)
+    idx += 1
+    fig_performance_by_archetype("synthetic", idx)
+    idx += 1
+
+    fig_significance_heatmap(idx)
+    idx += 1
 
     logger.info("Figure generation complete.")
 

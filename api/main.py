@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="Localized Hybrid Movie Recommender - Thesis Prototype",
+    title="recosys - Localized Hybrid Movie Recommender",
     lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory="api/static"), name="static")
