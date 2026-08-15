@@ -82,27 +82,22 @@ MAX_INFERRED_LANGUAGES = 3
 TRAIN_SPLIT_RATIO = 0.8
 RANDOM_STATE = 42
 
-
-COHORT_DESIGN_NOTE = """\
-Measured from the cleaned MovieLens 32M / TMDB catalogue used in this study:
-
-  * 17,112 catalogue titles, of which exactly 1 is Nepali-language
-    (Manakamana, 2013 - a Documentary, 12 votes).
-  * Of 159,998 MovieLens users with >= 20 liked ratings, 90.06% are
-    English-dominant. Japanese-inclined users are 0.30%, Hindi-inclined 0.14%
-    and Korean-inclined 0.09% of the population.
-
-The target cohort is modelled as ~65% non-Hollywood, so it corresponds to
-roughly 0.5% of the field's standard benchmark population. Two consequences
-follow, and both are reported as findings rather than limitations:
-
-  1. Localization for this cohort cannot mean retrieving national cinema,
-     because the benchmark catalogues contain almost none. It must instead
-     mean adapting to a multilingual consumption profile.
-  2. A synthetic cohort is methodologically necessary: the benchmark contains
-     only a few hundred users matching the minority-language archetypes, which
-     is too few and too sparse to train on, though enough to *validate* against.
-"""
+COHORT_DESIGN_NOTE: str = (
+    "Proxy Cohort Design\n"
+    "-------------------\n"
+    f"  Target users    : {N_COHORT_USERS}\n"
+    f"  Age range       : {COHORT_AGE_RANGE[0]}–{COHORT_AGE_RANGE[1]}\n"
+    f"  Gender          : {COHORT_GENDER}\n"
+    f"  Languages       : {', '.join(COHORT_LANGUAGES)}\n"
+    f"  Like threshold  : ≥{LIKE_THRESHOLD} stars, ≥{MIN_LIKED_RATINGS} liked ratings\n"
+    f"  Train/test split: {TRAIN_SPLIT_RATIO:.0%} / {1 - TRAIN_SPLIT_RATIO:.0%}\n"
+    "  Archetypes:\n"
+    + "".join(
+        f"    [{a['priority']}] {a['name']:12s} target={a['target_share']:.0%}  "
+        f"min_share={a['min_share']:.0%}  lang={a['language'] or 'any'}\n"
+        for a in ARCHETYPE_SPECS
+    )
+)
 
 
 def assert_valid() -> None:

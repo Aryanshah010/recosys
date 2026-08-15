@@ -42,10 +42,10 @@ PALETTE = {
 
 plt.rcParams.update(
     {
-        "figure.dpi": 120,
+        "figure.dpi": 150,
         "savefig.dpi": 300,
         "savefig.bbox": "tight",
-        "font.size": 10,
+        "font.size": 12,
         "axes.grid": True,
         "grid.alpha": 0.25,
         "axes.spines.top": False,
@@ -162,12 +162,12 @@ def fig_model_performance(track: str, idx: int) -> None:
         colors = [PALETTE.get(m, "#888") for m in vals.index]
         ax.barh(range(len(vals)), vals.to_numpy(), color=colors)
         ax.set_yticks(range(len(vals)))
-        ax.set_yticklabels(vals.index, fontsize=8)
+        ax.set_yticklabels(vals.index, fontsize=10)
         ax.invert_yaxis()
-        ax.set_title(metric, fontsize=11, fontweight="bold")
+        ax.set_title(metric, fontsize=12, fontweight="bold")
         ax.set_xlabel("mean")
         for i, v in enumerate(vals.to_numpy()):
-            ax.text(v, i, f" {v:.3f}", va="center", fontsize=8)
+            ax.text(v, i, f" {v:.3f}", va="center", fontsize=9)
 
     fig.suptitle(
         f"RQ1 — ranking performance ({track} cohort)", fontsize=13, fontweight="bold"
@@ -197,11 +197,11 @@ def fig_diversity(track: str, idx: int) -> None:
             color=[PALETTE.get(m, "#888") for m in vals.index],
         )
         ax.set_yticks(range(len(vals)))
-        ax.set_yticklabels(vals.index, fontsize=8)
+        ax.set_yticklabels(vals.index, fontsize=10)
         ax.invert_yaxis()
-        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.set_title(title, fontsize=12, fontweight="bold")
         for i, v in enumerate(vals.to_numpy()):
-            ax.text(v, i, f" {v:.2f}", va="center", fontsize=8)
+            ax.text(v, i, f" {v:.2f}", va="center", fontsize=9)
 
     fig.suptitle(
         f"RQ2 — exposure diversity ({track} cohort). Lower novelty = tighter filter bubble.",
