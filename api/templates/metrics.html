@@ -1,8 +1,5 @@
 {% extends "base.html" %} {% import "_macros.html" as ui %} {% block title
 %}Metrics — RQ1{% endblock %} {% block content %}
-<div class="eyebrow">
-  RQ1 · Does the cohort signal improve ranking accuracy?
-</div>
 <h1>Model performance</h1>
 
 {{ ui.track_toggle('/metrics', tracks, track_labels, track) }}

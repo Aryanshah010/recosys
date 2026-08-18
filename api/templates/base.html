@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}recosys · Localized Hybrid Recommender{% endblock %}</title>
+    <title>
+      {% block title %}recosys · Localized Hybrid Recommender{% endblock %}
+    </title>
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
@@ -12,8 +14,8 @@
       <div class="links">
         <a href="/">Users</a>
         <a href="/cohort">Cohort</a>
-        <a href="/metrics">Metrics · RQ1</a>
-        <a href="/bias">Bias · RQ2</a>
+        <a href="/metrics">Metrics</a>
+        <a href="/bias">Bias</a>
       </div>
     </nav>
     <main class="wrap">{% block content %}{% endblock %}</main>
